@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
-import '../models/section_model.dart';
-import '../models/todo_model.dart';
+import '../backend/models/section_model.dart';
+import '../backend/models/todo_model.dart';
 import 'todo_providers.dart';
+import 'performance_initialization_providers.dart';
 
-// Provider lấy danh sách task theo sectionId
+// Provider lấy danh sách task theo sectionId với auto-refresh
+// Cải thiện: Đảm bảo UI rebuild khi có todo changes
 final tasksBySectionProvider = Provider.family<List<Todo>, String>((
   ref,
   sectionId,
@@ -15,16 +17,29 @@ final tasksBySectionProvider = Provider.family<List<Todo>, String>((
       .toList();
 });
 
-final sectionBoxProvider = Provider<Box<SectionModel>>(
-  (ref) => Hive.box<SectionModel>('sections'),
-);
+// Updated to use initialization provider - sectionBoxProvider now comes from performance_initialization_providers.dart
 
+// Provider lấy tất cả sections (for search)
+final allSectionsProvider = Provider<List<SectionModel>>((ref) {
+  final box = ref.watch(enhancedSectionBoxProvider);
+  return box.values.toList();
+});
+
+// Provider lấy danh sách sections theo projectId với auto-refresh
+// Cải thiện: Listen đến cả sectionListNotifierProvider để UI rebuild khi có thay đổi
 final sectionsByProjectProvider = Provider.family<List<SectionModel>, String>((
   ref,
   projectId,
 ) {
-  final box = ref.watch(sectionBoxProvider);
-  return box.values.where((s) => s.projectId == projectId).toList();
+  // Watch both the box and the notifier to ensure UI rebuilds
+  final box = ref.watch(enhancedSectionBoxProvider);
+  final notifierState = ref.watch(sectionListNotifierProvider(projectId));
+
+  // Use notifier state if available, otherwise fall back to box data
+  // This ensures UI rebuilds when sections are added/modified/deleted
+  return notifierState.isNotEmpty
+      ? notifierState
+      : box.values.where((s) => s.projectId == projectId).toList();
 });
 
 class SectionListNotifier extends StateNotifier<List<SectionModel>> {
@@ -75,6 +90,6 @@ final sectionListNotifierProvider =
       List<SectionModel>,
       String
     >((ref, projectId) {
-      final box = ref.watch(sectionBoxProvider);
+      final box = ref.watch(enhancedSectionBoxProvider);
       return SectionListNotifier(box, projectId);
     });

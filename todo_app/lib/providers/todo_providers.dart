@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import '../models/todo_model.dart';
+import '../backend/models/todo_model.dart';
 import 'package:hive/hive.dart';
+import 'performance_initialization_providers.dart';
 
 // Provider lưu trạng thái ngày đầu tuần hiện tại để chuyển tuần (Riverpod)
 final upcomingWeekStartProvider = StateProvider<DateTime>((ref) {
@@ -117,6 +118,8 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
     required String id,
     required String description,
     DateTime? dueDate,
+    String? projectId,
+    String? sectionId,
   }) {
     final idx = _box.values.toList().indexWhere((todo) => todo.id == id);
     if (idx != -1) {
@@ -124,7 +127,14 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
       if (todo != null) {
         _box.putAt(
           idx,
-          todo.copyWith(description: description, dueDate: dueDate),
+          todo.copyWith(
+            description: description,
+            dueDate: dueDate,
+            projectId: projectId,
+            sectionId: sectionId,
+            projectIdSetToNull: projectId == null,
+            sectionIdSetToNull: sectionId == null,
+          ),
         );
         state = _box.values.toList();
       }
@@ -138,22 +148,43 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
       state = _box.values.toList();
     }
   }
+
+  // Method để force refresh state từ box (dùng khi có external changes)
+  void refreshFromBox() {
+    state = _box.values.toList();
+    print('🔄 TodoListNotifier refreshed: ${state.length} todos');
+  }
 }
 
 // --- PROVIDERS ---
 // Các provider dưới đây sử dụng Riverpod để quản lý state cho todo list, sidebar, bộ lọc, tiêu đề app bar...
 // Provider lưu trạng thái ngày chọn khi tạo task mới ở Upcoming
+// Auto-sync với upcomingSelectedDateProvider để cùng ngày
 final newTodoDateProvider = StateProvider<DateTime>((ref) {
-  // Luôn khởi tạo là hôm nay, không lấy từ provider khác
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day);
+  final upcomingSelectedDate = ref.watch(upcomingSelectedDateProvider);
+
+  // Nếu user chọn "All" (year 9999) thì dùng ngày hôm nay
+  if (upcomingSelectedDate.year == 9999) {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  // Ngược lại sync với ngày được chọn ở date selector
+  return DateTime(
+    upcomingSelectedDate.year,
+    upcomingSelectedDate.month,
+    upcomingSelectedDate.day,
+  );
 });
 
 // Provider quản lý danh sách công việc (StateNotifierProvider - Riverpod)
+// Updated to use initialization provider instead of direct Hive.box() access
 final todoListProvider = StateNotifierProvider<TodoListNotifier, List<Todo>>((
   ref,
 ) {
-  final box = Hive.box<Todo>('todos');
+  final box = ref.watch(
+    todoBoxProvider,
+  ); // Enhanced box through compatibility provider
   return TodoListNotifier(box);
 });
 
@@ -223,3 +254,7 @@ final todayTodoCountProvider = Provider<int>((ref) {
       )
       .length;
 });
+
+// Providers for project/section selection in AddTaskWidget
+final newTodoProjectIdProvider = StateProvider<String?>((ref) => null);
+final newTodoSectionIdProvider = StateProvider<String?>((ref) => null);
