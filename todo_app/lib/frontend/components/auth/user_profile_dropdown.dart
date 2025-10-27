@@ -212,14 +212,6 @@ class _UserProfileDropdownState extends ConsumerState<UserProfileDropdown>
             child: Column(
               children: [
                 _buildMenuItem(
-                  icon: Icons.search,
-                  label: 'Tìm kiếm tasks & projects...',
-                  onTap: () {
-                    _removeOverlay();
-                    // Add search functionality here
-                  },
-                ),
-                _buildMenuItem(
                   icon: Icons.logout,
                   label: 'Logout',
                   iconColor: theme.colorScheme.error,

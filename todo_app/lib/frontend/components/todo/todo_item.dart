@@ -126,10 +126,16 @@ class TodoItem extends ConsumerWidget {
 
   /// ⭐ LEVEL 1: Simple Action Button
   Widget _buildTrailing(BuildContext context, WidgetRef ref) {
-    /// ✅ ENHANCED: Assigned User Avatar thay thế Delete Icon
+    /// ✅ FIXED: Show Assignee Avatar (correct business logic)
+    /// Display the avatar of the person who should work on this task
+    /// If unassigned, show the owner avatar as fallback
+
+    final displayUserId = todo.assignedToId ?? todo.ownerId;
+    final displayUserName = todo.assignedToDisplayName;
+
     return AssignedUserAvatar(
-      assignedToId: todo.assignedToId,
-      assignedToDisplayName: todo.assignedToDisplayName,
+      assignedToId: displayUserId, // Show assignee if assigned, otherwise owner
+      assignedToDisplayName: displayUserName,
       size: 32,
     );
   }

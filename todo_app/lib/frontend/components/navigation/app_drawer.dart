@@ -189,7 +189,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
             text: 'Today',
             item: SidebarItem.today,
             isSelected: selectedItem == SidebarItem.today,
-            trailing: todayCount > 0 ? Text(todayCount.toString()) : null,
+            trailing: _buildTodayTrailing(ref),
           ),
           _buildDrawerItem(
             context,
@@ -253,6 +253,52 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
         ref.read(sidebarItemProvider.notifier).state = item;
         Navigator.pop(context);
       },
+    );
+  }
+
+  /// ⭐ TODAY TRAILING: Build trailing widget for Today item
+  Widget _buildTodayTrailing(WidgetRef ref) {
+    final todayCount = ref.watch(todayTodoCountProvider);
+    final overdueCount = ref.watch(overdueTodoCountProvider); // NEW: Watch overdue count
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (todayCount > 0)
+          Container(
+            margin: const EdgeInsets.only(right: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              '$todayCount',
+              style: TextStyle(
+                color: Colors.green,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        if (overdueCount > 0)
+          Container(
+            margin: const EdgeInsets.only(right: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              '$overdueCount',
+              style: TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+      ],
     );
   }
 

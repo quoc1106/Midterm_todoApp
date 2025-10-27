@@ -81,6 +81,9 @@ class AppInitializationWidget extends ConsumerWidget {
 
       debugShowCheckedModeBanner: false,
 
+      /// ✅ FIXED: Add proper Navigator configuration to prevent history.isNotEmpty error
+      navigatorKey: GlobalKey<NavigatorState>(),
+
       home: Stack(
         children: [
           /// ⭐ AUTH INTEGRATED: Authentication-aware initialization

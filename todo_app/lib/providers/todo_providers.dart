@@ -4,12 +4,21 @@ import '../backend/models/todo_model.dart';
 import 'package:hive/hive.dart';
 import 'performance_initialization_providers.dart';
 import 'auth_providers.dart'; // for currentUserProvider
+import 'project_providers.dart'; // for projectsProvider
 
 // Provider lưu trạng thái ngày đầu tuần hiện tại để chuyển tuần (Riverpod)
 final upcomingWeekStartProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
-  // Tìm thứ 2 gần nhất (hoặc hôm nay nếu là thứ 2)
-  return now.subtract(Duration(days: now.weekday - 1));
+  // ✅ CRITICAL FIXED: Tính toán đúng thứ 2 của tuần (Monday = 1)
+  final today = DateTime(now.year, now.month, now.day); // Normalized to start of day
+  final daysFromMonday = today.weekday - 1; // Monday = 0, Tuesday = 1, etc.
+  final mondayOfThisWeek = today.subtract(Duration(days: daysFromMonday));
+
+  print('🔍 WEEK DEBUG: Today is ${today} (weekday: ${today.weekday})');
+  print('🔍 WEEK DEBUG: Days from Monday: $daysFromMonday');
+  print('🔍 WEEK DEBUG: Monday of this week: $mondayOfThisWeek');
+
+  return mondayOfThisWeek;
 });
 
 // Provider lưu trạng thái ngày đang chọn ở Upcoming (Riverpod)
@@ -96,6 +105,14 @@ class DateUtils {
     return checkDate.isBefore(today);
   }
 
+  // ⭐ NEW: Utility for overdue date validation
+  static bool isOverdue(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final checkDate = DateTime(date.year, date.month, date.day);
+    return checkDate.isBefore(today);
+  }
+
   static bool isTodayOrFuture(DateTime date) {
     return isToday(date) || isUpcoming(date);
   }
@@ -117,11 +134,40 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
   }
 
   static List<Todo> _filterByOwner(Box<Todo> box, String? ownerId) {
-    // Legacy todos without ownerId (null) will not be visible to authenticated users.
-    final filtered = box.values
-        .where((t) => t.ownerId == ownerId)
-        .toList();
-    // print('🔍 _filterByOwner: ownerId=$ownerId, found ${filtered.length} todos');
+    // ✅ FIXED: Filter by assignee instead of owner for Today/Upcoming views
+    // Business Logic: Users should see tasks assigned TO them, not created BY them
+    final allTodos = box.values.toList();
+
+    // Debug: Log all todos to understand the issue
+    print('🔍 DEBUG: Filtering todos for user: $ownerId');
+    print('🔍 DEBUG: Total todos in box: ${allTodos.length}');
+
+    for (int i = 0; i < allTodos.length && i < 5; i++) {
+      final todo = allTodos[i];
+      print('🔍 DEBUG: Todo $i - ownerId: ${todo.ownerId}, assignedTo: ${todo.assignedToId}, desc: ${todo.description}');
+    }
+
+    List<Todo> filtered;
+
+    if (ownerId == null) {
+      // Guest user - only show unowned and unassigned todos
+      filtered = allTodos.where((t) => t.ownerId == null && t.assignedToId == null).toList();
+    } else {
+      // ✅ FIXED: Show tasks assigned TO current user, not created BY current user
+      // Business Rule: Today/Upcoming should show what user needs to work on
+      filtered = allTodos.where((t) =>
+        t.assignedToId == ownerId || // Tasks assigned to current user
+        (t.assignedToId == null && t.ownerId == ownerId) // Unassigned tasks owned by user
+      ).toList();
+    }
+
+    print('🔍 DEBUG: Filtered todos count: ${filtered.length}');
+    print('🔍 DEBUG: Current user can see these todos (assigned to them):');
+    for (int i = 0; i < filtered.length && i < 3; i++) {
+      final todo = filtered[i];
+      print('🔍 DEBUG: - ${todo.description} (assigned to: ${todo.assignedToId}, owner: ${todo.ownerId})');
+    }
+
     return filtered;
   }
 
@@ -431,3 +477,205 @@ final filteredTodoListProvider = Provider<List<Todo>>((ref) {
 
 // ✅ NEW: Provider to track selected member filter (moved from project_members_dialog.dart)
 final selectedMemberFilterProvider = StateProvider<String?>((ref) => null);
+
+// ✅ NEW: Provider để quản lý trạng thái thu gọn/mở rộng của overdue section
+final overdueCollapsedProvider = StateProvider<bool>((ref) => false);
+
+// ✅ NEW: Provider để lấy danh sách overdue todos
+final overdueTodosProvider = Provider<List<Todo>>((ref) {
+  final todos = ref.watch(todoListProvider);
+  return todos
+      .where(
+        (todo) =>
+            !todo.completed &&
+            todo.dueDate != null &&
+            DateUtils.isOverdue(todo.dueDate!),
+      )
+      .toList();
+});
+
+// ✅ NEW: Provider để đếm số lượng overdue todos
+final overdueTodoCountProvider = Provider<int>((ref) {
+  final overdueTodos = ref.watch(overdueTodosProvider);
+  return overdueTodos.length;
+});
+
+// ✅ NEW: Provider để lấy todos chỉ trong ngày hôm nay (không bao gồm overdue)
+final todayOnlyTodosProvider = Provider<List<Todo>>((ref) {
+  final todos = ref.watch(todoListProvider);
+  return todos
+      .where(
+        (todo) =>
+            !todo.completed &&
+            todo.dueDate != null &&
+            DateUtils.isToday(todo.dueDate!),
+      )
+      .toList();
+});
+
+// ✅ NEW: Provider cho Upcoming view - lấy TẤT CẢ overdue todos (không chỉ trong tuần)
+final upcomingOverdueTodosProvider = Provider<List<Todo>>((ref) {
+  final todos = ref.watch(todoListProvider);
+  return todos
+      .where(
+        (todo) =>
+            !todo.completed &&
+            todo.dueDate != null &&
+            DateUtils.isOverdue(todo.dueDate!),
+      )
+      .toList();
+});
+
+// ✅ NEW: Provider quản lý trạng thái thu gọn/mở rộng cho từng nhóm ngày trong Upcoming
+final upcomingGroupCollapsedProvider = StateProvider.family<bool, String>((ref, dateKey) => false);
+
+// ✅ NEW: Provider quản lý trạng thái thu gọn overdue section trong Upcoming
+final upcomingOverdueCollapsedProvider = StateProvider<bool>((ref) => false);
+
+// ✅ CRITICAL FIXED: Enhanced Provider cho Upcoming grouped todos - BÀO GỒM TASKS HÔM NAY
+final enhancedUpcomingGroupedTodosProvider = Provider<List<GroupedTodos>>((ref) {
+  final todos = ref.watch(todoListProvider);
+  final selectedDate = ref.watch(upcomingSelectedDateProvider);
+
+  // Nếu chọn "All" (year 9999), hiển thị tasks trong tuần hiện tại
+  if (selectedDate.year == 9999) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // ✅ CRITICAL FIXED: Sử dụng upcomingWeekStartProvider để đồng bộ với date selector
+    final weekStart = ref.watch(upcomingWeekStartProvider);
+    final weekEnd = weekStart.add(const Duration(days: 6));
+
+    print('🔍 ENHANCED DEBUG: Current date: $today');
+    print('🔍 ENHANCED DEBUG: Week start: $weekStart');
+    print('🔍 ENHANCED DEBUG: Week end: $weekEnd');
+    print('🔍 ENHANCED DEBUG: Today weekday: ${today.weekday}');
+    print('🔍 ENHANCED DEBUG: Is today >= weekStart? ${!today.isBefore(weekStart)}');
+    print('🔍 ENHANCED DEBUG: Is today <= weekEnd? ${!today.isAfter(weekEnd)}');
+
+    // ✅ DEBUG: Log all todos before filtering with detailed info
+    print('🔍 ENHANCED DEBUG: All todos count: ${todos.length}');
+    for (final todo in todos) {
+      if (todo.dueDate != null) {
+        final todoDueDate = DateTime(todo.dueDate!.year, todo.dueDate!.month, todo.dueDate!.day);
+        print('🔍 ENHANCED DEBUG: Todo "${todo.description}"');
+        print('   - Original date: ${todo.dueDate}');
+        print('   - Normalized date: $todoDueDate');
+        print('   - Completed: ${todo.completed}');
+        print('   - Is >= weekStart? ${!todoDueDate.isBefore(weekStart)}');
+        print('   - Is <= weekEnd? ${!todoDueDate.isAfter(weekEnd)}');
+        print('   - Will be included? ${!todo.completed && !todoDueDate.isBefore(weekStart) && !todoDueDate.isAfter(weekEnd)}');
+      }
+    }
+
+    // ✅ CRITICAL FIXED: Lấy tasks CHỈ trong tuần hiện tại - BÀO GỒM HÔM NAY
+    final weekTodos = todos.where((todo) {
+      if (todo.dueDate == null || todo.completed) return false;
+
+      // ✅ FIXED: Normalize due date to start of day for comparison
+      final todoDueDate = DateTime(todo.dueDate!.year, todo.dueDate!.month, todo.dueDate!.day);
+
+      // ✅ CRITICAL FIXED: Chỉ check week boundaries, không exclude hôm nay
+      final isInWeek = !todoDueDate.isBefore(weekStart) && !todoDueDate.isAfter(weekEnd);
+
+      print('🔍 FILTER DEBUG: "${todo.description}" ($todoDueDate) -> included: $isInWeek');
+      return isInWeek;
+    }).toList();
+
+    print('🔍 ENHANCED DEBUG: Week todos count after filtering: ${weekTodos.length}');
+    for (final todo in weekTodos) {
+      print('🔍 ENHANCED DEBUG: - ${todo.description} (${todo.dueDate})');
+    }
+
+    // Nhóm theo ngày
+    final Map<String, List<Todo>> groupedByDate = {};
+    for (final todo in weekTodos) {
+      final todoDueDate = DateTime(todo.dueDate!.year, todo.dueDate!.month, todo.dueDate!.day);
+      final dateKey = '${todoDueDate.year}-${todoDueDate.month}-${todoDueDate.day}';
+      groupedByDate.putIfAbsent(dateKey, () => []).add(todo);
+      print('🔍 GROUPING DEBUG: Added "${todo.description}" to group $dateKey');
+    }
+
+    // Chuyển đổi thành GroupedTodos và sắp xếp theo ngày
+    final result = groupedByDate.entries.map((entry) {
+      final parts = entry.key.split('-');
+      final date = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+      return GroupedTodos(date, entry.value);
+    }).toList();
+
+    result.sort((a, b) => a.date.compareTo(b.date));
+
+    print('🔍 ENHANCED DEBUG: Final grouped result count: ${result.length}');
+    for (final group in result) {
+      print('🔍 ENHANCED DEBUG: - ${group.date}: ${group.todos.length} todos');
+      for (final todo in group.todos) {
+        print('🔍 ENHANCED DEBUG:   * ${todo.description}');
+      }
+    }
+
+    return result;
+  }
+
+  // ✅ FIXED: Logic cho khi chọn ngày cụ thể - sử dụng weekStart từ provider
+  final weekStart = ref.watch(upcomingWeekStartProvider);
+  final days = List.generate(7, (i) {
+    final d = weekStart.add(Duration(days: i));
+    return DateTime(d.year, d.month, d.day);
+  });
+
+  List<GroupedTodos> result = [];
+  for (final day in days) {
+    final group = todos
+        .where(
+          (todo) =>
+              todo.dueDate != null &&
+              todo.dueDate!.year == day.year &&
+              todo.dueDate!.month == day.month &&
+              todo.dueDate!.day == day.day &&
+              !todo.completed,
+        )
+        .toList();
+    if (group.isNotEmpty) {
+      result.add(GroupedTodos(day, group));
+    }
+  }
+  return result;
+});
+
+// ✅ NEW: Provider cho Project/Section views - hiển thị TẤT CẢ todos trong project
+// Khác với todoListProvider, provider này không filter theo assignee
+final projectTodosProvider = Provider<List<Todo>>((ref) {
+  // ✅ FIX: Watch todoBoxProvider properly to ensure reactive updates
+  final todoBox = ref.watch(todoBoxProvider);
+  final currentUser = ref.watch(currentUserProvider);
+
+  if (currentUser == null) {
+    // Guest user - only show unowned and unassigned todos
+    return todoBox.values.where((todo) =>
+      todo.ownerId == null && todo.assignedToId == null
+    ).toList();
+  }
+
+  // ✅ PROJECT/SECTION VIEW LOGIC: Show ALL tasks in accessible projects
+  // Business Rule: In shared workspaces, users should see all tasks for collaboration
+  final accessibleProjects = ref.watch(projectsProvider); // Already filtered by user access
+  final accessibleProjectIds = accessibleProjects.map((p) => p.id).toSet();
+
+  // ✅ FIX: Force refresh on todoBox changes by converting to list first
+  final allTodos = todoBox.values.toList();
+
+  return allTodos.where((todo) {
+    // Show tasks in accessible projects (regardless of assignee)
+    if (todo.projectId != null && accessibleProjectIds.contains(todo.projectId)) {
+      return true;
+    }
+
+    // Also show personal tasks (owned by current user, no project)
+    if (todo.projectId == null && todo.ownerId == currentUser.id) {
+      return true;
+    }
+
+    return false;
+  }).toList();
+});
+

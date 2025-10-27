@@ -4,7 +4,7 @@ import '../../../../providers/performance_initialization_providers.dart';
 import '../../../../providers/auth_providers.dart'; // 🔧 USER SEPARATION: Import for currentUserProvider
 import '../../../../providers/project_providers.dart'; // 🔧 USER SEPARATION: Import for projectsProvider
 import '../../../../providers/section_providers.dart'; // 🔧 USER SEPARATION: Import for sectionsByProjectProvider
-import '../../../../providers/todo_providers.dart'; // 🔧 USER SEPARATION: Import for todoListProvider
+import '../../../../providers/todo_providers.dart' show projectTodosProvider, sectionListNotifierProvider, allSectionsProvider, todoListProvider; // ✅ FIXED: Import projectTodosProvider
 import '../../../../backend/utils/date_utils.dart' as app_date_utils;
 import '../../../../backend/models/project_model.dart'; // 🔧 MISSING IMPORT: Add ProjectModel import
 import '../../../../backend/models/section_model.dart';
@@ -55,8 +55,9 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
     final projects = ref.watch(projectsProvider); // 🔧 USER FILTERED: Chỉ projects của current user
     final sections = ref.watch(sectionsByProjectProvider(widget.projectId)); // 🔧 USER FILTERED: Chỉ sections của current user trong project này
 
-    // ✅ CHANGED: Use filtered todos instead of regular todos to support member filtering
-    final todos = ref.watch(filteredTodoListProvider); // 🔧 USER FILTERED + MEMBER FILTERED: Chỉ todos của current user và filtered by selected member
+    // ✅ CHANGED: Use projectTodosProvider instead of filteredTodoListProvider for Project/Section views
+    // This shows ALL tasks in the project, not just tasks assigned to current user
+    final todos = ref.watch(projectTodosProvider); // 🔧 PROJECT VIEW: Show ALL tasks in accessible projects
 
     // 🔧 USER SEPARATION: Handle case khi project không tồn tại hoặc không thuộc về current user
     ProjectModel? project;

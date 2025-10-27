@@ -19,7 +19,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Backend imports
-import '../../providers/todo_providers.dart';
+import '../../providers/todo_providers.dart' show GroupedTodos, SidebarItem, upcomingGroupedTodosProvider, filteredTodosProvider, appBarTitleProvider, upcomingSelectedDateProvider, selectedProjectIdProvider, overdueTodosProvider, todayOnlyTodosProvider, overdueTodoCountProvider, overdueCollapsedProvider, enhancedUpcomingGroupedTodosProvider, upcomingOverdueTodosProvider, upcomingOverdueCollapsedProvider, upcomingGroupCollapsedProvider, addTaskGroupDateProvider, shouldShowAddTaskProvider, newTodoDateProvider, emptyDateMessageProvider, sidebarItemProvider;
+import '../../providers/todo_providers.dart' as TodoProviders show DateUtils;
 import '../../backend/models/todo_model.dart';
 
 // Frontend component imports
@@ -51,6 +52,12 @@ class TodoScreen extends ConsumerWidget {
     final selectedItem = ref.watch(sidebarItemProvider);
     final selectedUpcomingDate = ref.watch(upcomingSelectedDateProvider);
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
+
+    // ✅ NEW: Watch overdue and today-only todos for Today view
+    final overdueTodos = ref.watch(overdueTodosProvider);
+    final todayOnlyTodos = ref.watch(todayOnlyTodosProvider);
+    final overdueCount = ref.watch(overdueTodoCountProvider);
+    final isOverdueCollapsed = ref.watch(overdueCollapsedProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -84,7 +91,7 @@ class TodoScreen extends ConsumerWidget {
               if (selectedItem == SidebarItem.upcoming)
                 const SizedBox(height: 12),
 
-              // Main content area with original logic
+              // Main content area with updated Today view logic
               Expanded(
                 child: selectedItem == SidebarItem.upcoming
                     ? _buildUpcomingViewOriginal(
@@ -95,6 +102,15 @@ class TodoScreen extends ConsumerWidget {
                       )
                     : selectedItem == SidebarItem.completed
                     ? _buildCompletedView(context, ref, todos)
+                    : selectedItem == SidebarItem.today
+                    ? _buildTodayViewWithOverdue(
+                        context,
+                        ref,
+                        overdueTodos,
+                        todayOnlyTodos,
+                        overdueCount,
+                        isOverdueCollapsed,
+                      )
                     : (selectedItem == SidebarItem.myProject &&
                               selectedProjectId != null
                           ? ProjectSectionWidget(projectId: selectedProjectId)
@@ -123,18 +139,45 @@ class TodoScreen extends ConsumerWidget {
     List<GroupedTodos> groupedUpcoming,
     DateTime selectedUpcomingDate,
   ) {
+    // ✅ NEW: Use enhanced providers for better upcoming view
+    final enhancedGroupedUpcoming = ref.watch(enhancedUpcomingGroupedTodosProvider);
+    final upcomingOverdueTodos = ref.watch(upcomingOverdueTodosProvider);
+    final isUpcomingOverdueCollapsed = ref.watch(upcomingOverdueCollapsedProvider);
+
     if (selectedUpcomingDate.year == 9999) {
-      if (groupedUpcoming.isEmpty) {
+      // ✅ ENHANCED: "All" view with Overdue section and collapsible groups
+      if (enhancedGroupedUpcoming.isEmpty && upcomingOverdueTodos.isEmpty) {
         return _buildEmptyStateView(context, ref, SidebarItem.upcoming);
       }
+
       return ListView(
         children: [
-          for (final group in groupedUpcoming)
-            TodoGroupWidget(groupDate: group.date, todos: group.todos),
+          // ✅ NEW: Overdue section for Upcoming view
+          if (upcomingOverdueTodos.isNotEmpty) ...[
+            _buildUpcomingOverdueSection(
+              context,
+              ref,
+              upcomingOverdueTodos,
+              isUpcomingOverdueCollapsed,
+            ),
+            // ✅ FIXED: Hiển thị tasks trong overdue section khi không collapsed
+            if (!isUpcomingOverdueCollapsed)
+              ...upcomingOverdueTodos.map((todo) => TodoItem(todo: todo)),
+            const SizedBox(height: 16),
+          ],
+
+          // ✅ NEW: Collapsible date groups
+          for (final group in enhancedGroupedUpcoming)
+            _buildCollapsibleDateGroup(
+              context,
+              ref,
+              group,
+            ),
         ],
       );
     }
 
+    // Logic cũ cho khi chọn ngày cụ thể (giữ nguyên)
     final group = groupedUpcoming.firstWhere(
       (g) =>
           g.date.year == selectedUpcomingDate.year &&
@@ -148,7 +191,6 @@ class TodoScreen extends ConsumerWidget {
         : Consumer(
             builder: (context, ref, _) {
               final isOpen = ref.watch(addTaskGroupDateProvider) == group.date;
-              // ⭐ RIVERPOD LEVEL 2: Use shouldShowAddTaskProvider for smart button display
               final shouldShowAddTask = ref.watch(shouldShowAddTaskProvider);
               return ListView(
                 children: [
@@ -165,7 +207,6 @@ class TodoScreen extends ConsumerWidget {
                   ...group.todos.map(
                     (todo) => LegacyTodoItem.TodoItem(todo: todo),
                   ),
-                  // ⭐ RIVERPOD LEVEL 2: Smart Add Task button - only show for today/future
                   if (!isOpen && shouldShowAddTask)
                     TextButton.icon(
                       icon: const Icon(Icons.add_circle, color: Colors.red),
@@ -181,7 +222,6 @@ class TodoScreen extends ConsumerWidget {
                   if (isOpen)
                     AddTaskWidget(
                       showCancel: true,
-                      // ⭐ RIVERPOD LEVEL 2: Use newTodoDateProvider for smart date handling
                       presetDate: ref.watch(newTodoDateProvider),
                       onCancel: () {
                         ref.read(addTaskGroupDateProvider.notifier).state =
@@ -192,6 +232,242 @@ class TodoScreen extends ConsumerWidget {
               );
             },
           );
+  }
+
+  /// ✅ NEW: Overdue section cho Upcoming view
+  Widget _buildUpcomingOverdueSection(
+    BuildContext context,
+    WidgetRef ref,
+    List<Todo> overdueTodos,
+    bool isCollapsed,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1), // ✅ FIXED: Giống Today view
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red, width: 1),
+      ),
+      margin: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () {
+          ref.read(upcomingOverdueCollapsedProvider.notifier).state = !isCollapsed;
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.warning, // ✅ FIXED: Giống Today view
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Overdue',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  // ✅ FIXED: Item count badge giống Today view
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${overdueTodos.length}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    isCollapsed ? Icons.expand_more : Icons.expand_less,
+                    color: Colors.red,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// ✅ FIXED: Collapsible date groups cho Upcoming view - Sửa styling cho Today
+  Widget _buildCollapsibleDateGroup(
+    BuildContext context,
+    WidgetRef ref,
+    GroupedTodos group,
+  ) {
+    final dateKey = '${group.date.year}-${group.date.month}-${group.date.day}';
+    final isCollapsed = ref.watch(upcomingGroupCollapsedProvider(dateKey));
+    final isToday = TodoProviders.DateUtils.isToday(group.date);
+
+    // Format ngày hiển thị
+    String getDateLabel(DateTime date) {
+      final now = DateTime.now();
+      final tomorrow = now.add(const Duration(days: 1));
+
+      if (TodoProviders.DateUtils.isToday(date)) {
+        return 'Today';
+      } else if (date.year == tomorrow.year &&
+                 date.month == tomorrow.month &&
+                 date.day == tomorrow.day) {
+        return 'Tomorrow';
+      } else {
+        return '${date.day}/${date.month}/${date.year}';
+      }
+    }
+
+    // ✅ FIXED: Sử dụng Column để hiển thị header + tasks khi expanded
+    return Column(
+      children: [
+        // Header section
+        Container(
+          decoration: BoxDecoration(
+            color: isToday
+                ? Theme.of(context).colorScheme.primaryContainer  // ✅ FIXED: Màu xanh như Today view
+                : null,
+            borderRadius: BorderRadius.circular(12),
+            border: isToday
+                ? null  // ✅ FIXED: Không có border cho Today (giống Today view)
+                : Border.all(color: Colors.grey.shade300, width: 1),
+          ),
+          margin: const EdgeInsets.only(bottom: 8),
+          child: InkWell(
+            onTap: () {
+              ref.read(upcomingGroupCollapsedProvider(dateKey).notifier).state = !isCollapsed;
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        isToday ? Icons.today : Icons.calendar_today,
+                        color: isToday
+                            ? Theme.of(context).colorScheme.onPrimaryContainer  // ✅ FIXED: Màu icon giống Today view
+                            : Colors.grey.shade600,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        getDateLabel(group.date),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isToday
+                              ? Theme.of(context).colorScheme.onPrimaryContainer  // ✅ FIXED: Màu text giống Today view
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      // ✅ FIXED: Item count badge - hiển thị số lượng tasks
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                        decoration: BoxDecoration(
+                          color: isToday
+                              ? Theme.of(context).colorScheme.secondary  // ✅ FIXED: Màu badge giống Today view
+                              : Colors.grey.shade600,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${group.todos.length}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isToday
+                                ? Theme.of(context).colorScheme.onSecondary  // ✅ FIXED: Màu text badge giống Today view
+                                : Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        isCollapsed ? Icons.expand_more : Icons.expand_less,
+                        color: isToday
+                            ? Theme.of(context).colorScheme.onPrimaryContainer  // ✅ FIXED: Màu expand icon giống Today view
+                            : Colors.grey.shade600,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // ✅ FIXED: Tasks content when expanded
+        if (!isCollapsed) ...[
+          ...group.todos.map((todo) => TodoItem(todo: todo)),
+
+          // Add task button cho nhóm này
+          Consumer(
+            builder: (context, ref, _) {
+              final isOpen = ref.watch(addTaskGroupDateProvider) == group.date;
+              final shouldShowAddTask = !TodoProviders.DateUtils.isPastDate(group.date);
+
+              if (isOpen) {
+                return Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: AddTaskWidget(
+                    showCancel: true,
+                    presetDate: group.date,
+                    onCancel: () {
+                      ref.read(addTaskGroupDateProvider.notifier).state = null;
+                    },
+                    onTaskAdded: () {
+                      ref.read(addTaskGroupDateProvider.notifier).state = null;
+                    },
+                  ),
+                );
+              }
+
+              if (shouldShowAddTask) {
+                return ListTile(
+                  leading: Icon(
+                    Icons.add,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: Text(
+                    'Add task to ${getDateLabel(group.date)}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  onTap: () {
+                    ref.read(addTaskGroupDateProvider.notifier).state = group.date;
+                  },
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ],
+    );
   }
 
   /// ⭐ COMPLETED VIEW: Show completed tasks without strikethrough
@@ -216,6 +492,143 @@ class TodoScreen extends ConsumerWidget {
       itemBuilder: (context, index) {
         return TodoItem(todo: completedTodos[index]);
       },
+    );
+  }
+
+  /// ⭐ TODAY VIEW WITH OVERDUE: Combined view for Today with Overdue section
+  Widget _buildTodayViewWithOverdue(
+    BuildContext context,
+    WidgetRef ref,
+    List<Todo> overdueTodos,
+    List<Todo> todayOnlyTodos,
+    int overdueCount,
+    bool isOverdueCollapsed,
+  ) {
+    return ListView(
+      children: [
+        // Overdue section
+        if (overdueTodos.isNotEmpty) ...[
+          _buildSectionHeader(
+            context,
+            title: 'Overdue', // ✅ FIXED: Changed from Vietnamese to English
+            itemCount: overdueCount,
+            isCollapsed: isOverdueCollapsed,
+            onToggleCollapse: () {
+              ref.read(overdueCollapsedProvider.notifier).state =
+                  !isOverdueCollapsed;
+            },
+            isOverdue: true,
+          ),
+          if (!isOverdueCollapsed)
+            ...overdueTodos.map(
+              (todo) => LegacyTodoItem.TodoItem(todo: todo),
+            ),
+          const SizedBox(height: 16), // Add spacing between sections
+        ],
+
+        // Today's tasks section
+        _buildSectionHeader(
+          context,
+          title: 'Today', // ✅ FIXED: Changed from Vietnamese to English
+          itemCount: todayOnlyTodos.length,
+        ),
+        ...todayOnlyTodos.map(
+          (todo) => LegacyTodoItem.TodoItem(todo: todo),
+        ),
+
+        const SizedBox(height: 80), // Space for floating action button
+      ],
+    );
+  }
+
+  /// ⭐ SECTION HEADER: Reusable header for sections in Today view
+  Widget _buildSectionHeader(
+    BuildContext context, {
+    required String title,
+    required int itemCount,
+    bool isCollapsed = false,
+    VoidCallback? onToggleCollapse,
+    bool isOverdue = false,
+  }) {
+    final bool isCollapsible = onToggleCollapse != null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isOverdue
+            ? Colors.red.withOpacity(0.1)
+            : Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: isOverdue
+            ? Border.all(color: Colors.red, width: 1)
+            : null,
+      ),
+      margin: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: isCollapsible ? onToggleCollapse : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  if (isOverdue)
+                    Icon(
+                      Icons.warning,
+                      color: Colors.red,
+                      size: 20,
+                    ),
+                  if (isOverdue) const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isOverdue
+                          ? Colors.red
+                          : Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  // Item count badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                    decoration: BoxDecoration(
+                      color: isOverdue
+                          ? Colors.red
+                          : Theme.of(context).colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$itemCount',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: isOverdue
+                            ? Colors.white
+                            : Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                  ),
+                  if (isCollapsible) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      isCollapsed ? Icons.expand_more : Icons.expand_less,
+                      color: isOverdue
+                          ? Colors.red
+                          : Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
