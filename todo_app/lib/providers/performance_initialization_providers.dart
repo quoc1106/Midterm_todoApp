@@ -7,6 +7,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../backend/models/todo_model.dart';
 import '../backend/models/project_model.dart';
 import '../backend/models/section_model.dart';
+import '../backend/models/user.dart';
+import '../backend/models/project_member.dart';
+import '../backend/models/project_invitation.dart';
 import '../backend/core/hive_adapters.dart';
 
 // ============================================================================
@@ -59,6 +62,9 @@ class EnhancedAppInitData {
   final Box<Todo> todoBox;
   final Box<ProjectModel> projectBox;
   final Box<SectionModel> sectionBox;
+  final Box<ProjectMember> projectMemberBox;
+  final Box<ProjectInvitation> projectInvitationBox;
+  final Box<User> userBox;
   final DateTime initializationTime;
   final PerformanceData performance;
 
@@ -66,6 +72,9 @@ class EnhancedAppInitData {
     required this.todoBox,
     required this.projectBox,
     required this.sectionBox,
+    required this.projectMemberBox,
+    required this.projectInvitationBox,
+    required this.userBox,
     required this.initializationTime,
     required this.performance,
   });
@@ -96,19 +105,22 @@ final performanceAwareInitProvider = FutureProvider<EnhancedAppInitData>((
     HiveAdapterManager.registerAllAdapters();
     phaseTimes['adapter_registration'] = adapterStopwatch.elapsed;
 
-    // Phase 3: Box Opening (Concurrent)
+    // Phase 3: Box Opening (Concurrent) - Updated for shared project system
     final boxStopwatch = Stopwatch()..start();
-    final (todoBox, projectBox, sectionBox) =
+    final (todoBox, projectBox, sectionBox, projectMemberBox, projectInvitationBox, userBox) =
         await HiveAdapterManager.openAllBoxes();
     phaseTimes['box_opening'] = boxStopwatch.elapsed;
 
-    // Phase 4: Data Analysis
+    // Phase 4: Data Analysis - Updated for shared project system
     final analysisStopwatch = Stopwatch()..start();
     metadata['todo_count'] = todoBox.length;
     metadata['project_count'] = projectBox.length;
     metadata['section_count'] = sectionBox.length;
+    metadata['member_count'] = projectMemberBox.length;
+    metadata['invitation_count'] = projectInvitationBox.length;
     metadata['total_records'] =
-        todoBox.length + projectBox.length + sectionBox.length;
+        todoBox.length + projectBox.length + sectionBox.length +
+        projectMemberBox.length + projectInvitationBox.length;
 
     // Simulate data validation/migration if needed
     if (metadata['total_records'] > 1000) {
@@ -118,9 +130,9 @@ final performanceAwareInitProvider = FutureProvider<EnhancedAppInitData>((
     }
     phaseTimes['data_analysis'] = analysisStopwatch.elapsed;
 
-    // Phase 5: Memory Usage Calculation
+    // Phase 5: Memory Usage Calculation - Updated for shared project system
     final memoryStopwatch = Stopwatch()..start();
-    final memoryUsageKB = _estimateMemoryUsage(todoBox, projectBox, sectionBox);
+    final memoryUsageKB = _estimateMemoryUsage(todoBox, projectBox, sectionBox, projectMemberBox, projectInvitationBox);
     metadata['memory_usage_kb'] = memoryUsageKB;
     phaseTimes['memory_calculation'] = memoryStopwatch.elapsed;
 
@@ -140,6 +152,9 @@ final performanceAwareInitProvider = FutureProvider<EnhancedAppInitData>((
       todoBox: todoBox,
       projectBox: projectBox,
       sectionBox: sectionBox,
+      projectMemberBox: projectMemberBox,
+      projectInvitationBox: projectInvitationBox,
+      userBox: userBox,
       initializationTime: DateTime.now(),
       performance: performanceData,
     );
@@ -273,6 +288,38 @@ final enhancedSectionBoxProvider = Provider<Box<SectionModel>>((ref) {
   );
 });
 
+// ✅ NEW: Enhanced Shared Project Box Providers
+final enhancedProjectMemberBoxProvider = Provider<Box<ProjectMember>>((ref) {
+  final initData = ref.watch(performanceAwareInitProvider);
+  return initData.when(
+    loading: () => throw StateError('Performance-aware database not ready'),
+    error: (error, stack) =>
+        throw StateError('Database initialization failed: $error'),
+    data: (data) => data.projectMemberBox,
+  );
+});
+
+final enhancedProjectInvitationBoxProvider = Provider<Box<ProjectInvitation>>((ref) {
+  final initData = ref.watch(performanceAwareInitProvider);
+  return initData.when(
+    loading: () => throw StateError('Performance-aware database not ready'),
+    error: (error, stack) =>
+        throw StateError('Database initialization failed: $error'),
+    data: (data) => data.projectInvitationBox,
+  );
+});
+
+// ✅ NEW: Enhanced User Box Provider - Updated to use initialization data
+final enhancedUserBoxProvider = Provider<Box<User>>((ref) {
+  final initData = ref.watch(performanceAwareInitProvider);
+  return initData.when(
+    loading: () => throw StateError('Performance-aware database not ready'),
+    error: (error, stack) =>
+        throw StateError('Database initialization failed: $error'),
+    data: (data) => data.userBox,
+  );
+});
+
 // ============================================================================
 // COMPATIBILITY PROVIDERS (for backward compatibility)
 // ============================================================================
@@ -296,16 +343,22 @@ int _estimateMemoryUsage(
   Box<Todo> todoBox,
   Box<ProjectModel> projectBox,
   Box<SectionModel> sectionBox,
+  Box<ProjectMember> projectMemberBox,
+  Box<ProjectInvitation> projectInvitationBox,
 ) {
   // Rough estimation based on record counts
   const avgTodoSize = 200; // bytes per todo
   const avgProjectSize = 100; // bytes per project
   const avgSectionSize = 80; // bytes per section
+  const avgMemberSize = 150; // bytes per project member
+  const avgInvitationSize = 120; // bytes per project invitation
 
   final totalBytes =
       (todoBox.length * avgTodoSize) +
       (projectBox.length * avgProjectSize) +
-      (sectionBox.length * avgSectionSize);
+      (sectionBox.length * avgSectionSize) +
+      (projectMemberBox.length * avgMemberSize) +
+      (projectInvitationBox.length * avgInvitationSize);
 
   return totalBytes ~/ 1024; // Convert to KB
 }

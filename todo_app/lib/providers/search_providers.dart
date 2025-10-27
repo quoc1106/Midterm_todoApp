@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 import 'project_providers.dart';
-import 'section_providers.dart';
 import 'todo_providers.dart';
 
 /// Search result item với type để phân biệt
@@ -72,7 +71,6 @@ final searchResultsProvider = Provider.family<List<SearchResultItem>, String>((
     // Get data from enhanced providers
     final projects = ref.watch(projectsProvider);
     final todos = ref.watch(todoListProvider);
-    final sections = ref.watch(allSectionsProvider); // Add sections
 
     final results = <SearchResultItem>[];
     final lowerQuery = query.toLowerCase();
@@ -87,26 +85,6 @@ final searchResultsProvider = Provider.family<List<SearchResultItem>, String>((
             subtitle:
                 'Project • ${_getProjectTaskCount(ref, project.id)} tasks',
             type: SearchResultType.project,
-          ),
-        );
-      }
-    }
-
-    // Search sections
-    for (final section in sections) {
-      if (section.name.toLowerCase().contains(lowerQuery)) {
-        final project = projects.firstWhereOrNull(
-          (p) => p.id == section.projectId,
-        );
-        final projectName = project?.name ?? 'Unknown Project';
-
-        results.add(
-          SearchResultItem(
-            id: section.id,
-            title: section.name,
-            subtitle: 'Section in $projectName',
-            type: SearchResultType.section,
-            projectId: section.projectId,
           ),
         );
       }

@@ -13,8 +13,15 @@ class SectionModel {
   String name;
   @HiveField(2)
   final String projectId;
+  @HiveField(3)
+  final String ownerId; // 🔧 USER SEPARATION: Owner của section
 
-  SectionModel({required this.id, required this.name, required this.projectId});
+  SectionModel({
+    required this.id,
+    required this.name,
+    required this.projectId,
+    required this.ownerId, // 🔧 Required owner ID
+  });
 
   /// ✅ BUSINESS LOGIC METHODS - Pure backend logic
 
@@ -81,6 +88,7 @@ class SectionModel {
       id: id ?? this.id,
       name: name ?? this.name,
       projectId: projectId ?? this.projectId,
+      ownerId: ownerId, // ownerId không thay đổi
     );
   }
 
@@ -96,5 +104,5 @@ class SectionModel {
 
   @override
   String toString() =>
-      'SectionModel(id: $id, name: $name, projectId: $projectId)';
+      'SectionModel(id: $id, name: $name, projectId: $projectId, ownerId: $ownerId)';
 }

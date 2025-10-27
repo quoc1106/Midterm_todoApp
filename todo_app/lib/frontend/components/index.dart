@@ -11,6 +11,7 @@
 /// - app/: App-level components with LEVEL 4 patterns (✅ BATCH 4)
 /// - theme/: Theme management components with LEVEL 1-3 patterns (✅ BATCH 4)
 /// - layout/: Layout components with LEVEL 2-4 patterns (✅ BATCH 4)
+/// - auth/: Authentication components with LEVEL 1-3 patterns (✅ NEW AUTH SYSTEM)
 
 export 'todo/index.dart';
 export 'project/index.dart';
@@ -18,3 +19,4 @@ export 'navigation/index.dart';
 export 'app/index.dart';
 export 'theme/index.dart';
 export 'layout/index.dart';
+export 'auth/index.dart';

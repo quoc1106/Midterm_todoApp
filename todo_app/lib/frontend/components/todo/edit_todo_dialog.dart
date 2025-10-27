@@ -9,8 +9,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../backend/models/todo_model.dart';
 import '../../../providers/todo_providers.dart';
 import '../../../providers/performance_initialization_providers.dart';
+import '../../../providers/shared_project_providers.dart'; // ✅ NEW: Import for assignment
 import '../../../backend/models/project_model.dart';
 import '../../../backend/models/section_model.dart';
+import '../task_assignment/assign_user_dropdown.dart'; // ✅ NEW: Import assignment dropdown
+import '../task_assignment/assigned_user_avatar.dart'; // ✅ NEW: Import avatar component
 
 class EditTodoDialog extends ConsumerStatefulWidget {
   final Todo todo;
@@ -26,6 +29,7 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
   late DateTime? _selectedDate;
   late String? _selectedProjectId;
   late String? _selectedSectionId;
+  late String? _assignedUserId; // ✅ NEW: Assignment state
 
   /// ⭐ RIVERPOD LEVEL 2: Initialize with Todo Data
   @override
@@ -38,6 +42,7 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
     // Properly initialize with todo's project and section
     _selectedProjectId = widget.todo.projectId;
     _selectedSectionId = widget.todo.sectionId;
+    _assignedUserId = widget.todo.assignedToId; // ✅ NEW: Initialize assignment
   }
 
   @override
@@ -52,7 +57,7 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
     final sectionBox = ref.watch(sectionBoxProvider);
 
     return AlertDialog(
-      title: const Text('Chỉnh sửa Task'),
+      title: const Text('Edit Task'), // ✅ CHANGED: English
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -61,7 +66,7 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
             TextField(
               controller: _titleController,
               decoration: const InputDecoration(
-                labelText: 'Tên task',
+                labelText: 'Task name', // ✅ CHANGED: English
                 border: OutlineInputBorder(),
               ),
               maxLines: null,
@@ -78,15 +83,27 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
 
             // Section picker
             if (_selectedProjectId != null) _buildSectionPicker(sectionBox),
+            const SizedBox(height: 16), // Add spacing between fields
+
+            // Assigned user (assignment) section
+            _buildAssignedUserSection(),
           ],
         ),
       ),
       actions: [
+        // ✅ NEW: Delete button (icon thùng rác đỏ)
+        IconButton(
+          onPressed: _showDeleteConfirmation,
+          icon: const Icon(Icons.delete),
+          color: Colors.red,
+          tooltip: 'Delete task', // ✅ CHANGED: English
+        ),
+        const SizedBox(width: 8),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Hủy'),
+          child: const Text('Cancel'), // ✅ CHANGED: English
         ),
-        ElevatedButton(onPressed: _saveChanges, child: const Text('Lưu')),
+        ElevatedButton(onPressed: _saveChanges, child: const Text('Save')), // ✅ CHANGED: English
       ],
     );
   }
@@ -97,8 +114,8 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
         leading: const Icon(Icons.calendar_today),
         title: Text(
           _selectedDate != null
-              ? 'Ngày: ${_formatDate(_selectedDate!)}'
-              : 'Chọn ngày',
+              ? '${_formatDate(_selectedDate!)}' // ✅ CHANGED: Only show date
+              : 'Select date', // ✅ CHANGED: English
         ),
         trailing: _selectedDate != null
             ? IconButton(
@@ -163,6 +180,120 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
     );
   }
 
+  /// ✅ ENHANCED: Assignment section với avatar và proper project members
+  Widget _buildAssignedUserSection() {
+    // Get assigned user display name for better UI
+    String assignedDisplayName = 'Unassigned'; // ✅ CHANGED: English
+    if (_assignedUserId != null) {
+      assignedDisplayName = ref.watch(userDisplayNameProvider(_assignedUserId!));
+    }
+
+    return Card(
+      child: ListTile(
+        leading: AssignedUserAvatar(
+          assignedToId: _assignedUserId,
+          assignedToDisplayName: assignedDisplayName == 'Unassigned' ? null : assignedDisplayName,
+          size: 28,
+        ),
+        title: Text(
+          _assignedUserId != null
+              ? 'Assigned to: $assignedDisplayName' // ✅ CHANGED: English
+              : 'Unassigned task', // ✅ CHANGED: English as requested
+        ),
+        trailing: _assignedUserId != null
+            ? IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () => setState(() => _assignedUserId = null),
+              )
+            : null,
+        onTap: _showAssignUserDialog,
+      ),
+    );
+  }
+
+  /// ✅ ENHANCED: Assignment dialog với real project members
+  void _showAssignUserDialog() {
+    if (_selectedProjectId == null) {
+      // No project selected - show message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a project first')), // ✅ CHANGED: English
+      );
+      return;
+    }
+
+    // Get assignable users from the selected project
+    final assignableUsers = ref.read(assignableUsersInProjectProvider(_selectedProjectId!));
+
+    if (assignableUsers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No members in this project')), // ✅ CHANGED: English
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Assignee'), // ✅ CHANGED: English
+        content: SizedBox(
+          width: 300,
+          height: 400,
+          child: Column(
+            children: [
+              // Option to unassign
+              ListTile(
+                leading: const AssignedUserAvatar(
+                  assignedToId: null,
+                  size: 28,
+                ),
+                title: const Text('Unassigned'), // ✅ CHANGED: English
+                subtitle: const Text('No assignee'),
+                onTap: () {
+                  setState(() {
+                    _assignedUserId = null;
+                  });
+                  Navigator.of(context).pop();
+                },
+              ),
+              const Divider(),
+              // Project members
+              Expanded(
+                child: ListView.builder(
+                  itemCount: assignableUsers.length,
+                  itemBuilder: (context, index) {
+                    final user = assignableUsers[index];
+                    return ListTile(
+                      leading: AssignedUserAvatar(
+                        assignedToId: user.id,
+                        assignedToDisplayName: user.displayName,
+                        size: 28,
+                      ),
+                      title: Text(user.displayName),
+                      subtitle: Text('@${user.username}'),
+                      selected: _assignedUserId == user.id,
+                      onTap: () {
+                        setState(() {
+                          _assignedUserId = user.id;
+                        });
+                        Navigator.of(context).pop();
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'), // ✅ CHANGED: English
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickDate() async {
     final date = await showDatePicker(
       context: context,
@@ -180,20 +311,20 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Chọn Project'),
+        title: const Text('Select Project'), // ✅ CHANGED: English
         content: SizedBox(
-          width: 250, // Reduced from 300
-          height: 300, // Reduced from 400
+          width: 250,
+          height: 300,
           child: ListView.builder(
             shrinkWrap: true,
             itemCount: projects.length,
             itemBuilder: (context, index) {
               final project = projects[index];
               return ListTile(
-                dense: true, // Make list items more compact
+                dense: true,
                 title: Text(
                   project.name,
-                  style: const TextStyle(fontSize: 14), // Smaller text
+                  style: const TextStyle(fontSize: 14),
                 ),
                 onTap: () {
                   setState(() {
@@ -209,7 +340,7 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Hủy'),
+            child: const Text('Cancel'), // ✅ CHANGED: English
           ),
         ],
       ),
@@ -220,20 +351,20 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Chọn Section'),
+        title: const Text('Select Section'), // ✅ CHANGED: English
         content: SizedBox(
-          width: 250, // Reduced from 300
-          height: 300, // Reduced from 400
+          width: 250,
+          height: 300,
           child: ListView.builder(
             shrinkWrap: true,
             itemCount: sections.length,
             itemBuilder: (context, index) {
               final section = sections[index];
               return ListTile(
-                dense: true, // Make list items more compact
+                dense: true,
                 title: Text(
                   section.name,
-                  style: const TextStyle(fontSize: 14), // Smaller text
+                  style: const TextStyle(fontSize: 14),
                 ),
                 onTap: () {
                   setState(() => _selectedSectionId = section.id);
@@ -246,7 +377,7 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Hủy'),
+            child: const Text('Cancel'), // ✅ CHANGED: English
           ),
         ],
       ),
@@ -256,7 +387,7 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
   void _saveChanges() {
     if (_titleController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tên task không được để trống')),
+        const SnackBar(content: Text('Task name cannot be empty')), // ✅ CHANGED: English
       );
       return;
     }
@@ -269,12 +400,39 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
           dueDate: _selectedDate,
           projectId: _selectedProjectId,
           sectionId: _selectedSectionId,
+          assignedToId: _assignedUserId, // ✅ NEW: Save assignment change
         );
     Navigator.of(context).pop();
 
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Đã cập nhật task')));
+    ).showSnackBar(const SnackBar(content: Text('Task updated successfully')));
+  }
+
+  void _showDeleteConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: const Text('Are you sure you want to delete this task?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(todoListProvider.notifier).delete(widget.todo.id);
+              Navigator.of(context).pop();
+              Navigator.of(context).pop(); // Close the dialog and the edit screen
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(const SnackBar(content: Text('Task deleted successfully')));
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _getProjectName(List<ProjectModel> projects, String projectId) {

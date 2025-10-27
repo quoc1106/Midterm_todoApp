@@ -23,10 +23,19 @@ class DataService {
     bool? completed,
     String? projectId,
     String? sectionId,
+    String? ownerId, // optional owner id to namespace todos per user
   }) {
     try {
       final box = Hive.box<Todo>('todos');
       List<Todo> todos = box.values.toList();
+
+      // Filter by ownerId if provided; otherwise return only unowned (guest) todos
+      if (ownerId != null) {
+        todos = todos.where((t) => t.ownerId == ownerId).toList();
+      } else {
+        // If no ownerId specified, assume guest context and return only todos without owner
+        todos = todos.where((t) => t.ownerId == null).toList();
+      }
 
       // Apply filters
       if (completed != null) {
@@ -65,6 +74,16 @@ class DataService {
   Future<bool> updateTodo(Todo todo) async {
     try {
       final box = Hive.box<Todo>('todos');
+      final existing = box.get(todo.id);
+      if (existing != null) {
+        // Prevent cross-owner updates: only allow if owner matches (or both null)
+        final existingOwner = (existing as dynamic).ownerId as String?;
+        final newOwner = (todo as dynamic).ownerId as String?;
+        if (existingOwner != newOwner) {
+          print('⚠️ Owner mismatch: update aborted');
+          return false;
+        }
+      }
       await box.put(todo.id, todo);
       print('✅ Updated todo: ${todo.description}');
       return true;
@@ -226,6 +245,7 @@ class DataService {
     try {
       if (query.trim().isEmpty) return [];
 
+      // Default to guest context unless ownerId provided by caller in future overloads
       final allTodos = getAllTodos();
       final results = allTodos
           .where((todo) => todo.getSearchRelevance(query) > 0.0)

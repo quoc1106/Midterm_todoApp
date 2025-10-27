@@ -13,6 +13,7 @@ import '../../../backend/models/todo_model.dart';
 import '../../../providers/todo_providers.dart';
 import '../../../providers/performance_initialization_providers.dart';
 import '../../../backend/utils/date_utils.dart' as app_date_utils;
+import '../task_assignment/assigned_user_avatar.dart'; // ✅ NEW: Import avatar component
 import 'edit_todo_dialog.dart';
 
 class TodoItem extends ConsumerWidget {
@@ -125,10 +126,11 @@ class TodoItem extends ConsumerWidget {
 
   /// ⭐ LEVEL 1: Simple Action Button
   Widget _buildTrailing(BuildContext context, WidgetRef ref) {
-    return IconButton(
-      icon: const Icon(Icons.delete_outline),
-      onPressed: () => _handleDelete(context, ref),
-      color: Theme.of(context).colorScheme.error,
+    /// ✅ ENHANCED: Assigned User Avatar thay thế Delete Icon
+    return AssignedUserAvatar(
+      assignedToId: todo.assignedToId,
+      assignedToDisplayName: todo.assignedToDisplayName,
+      size: 32,
     );
   }
 

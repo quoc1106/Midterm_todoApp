@@ -19,17 +19,29 @@ class ProjectModelAdapter extends TypeAdapter<ProjectModel> {
     return ProjectModel(
       id: fields[0] as String,
       name: fields[1] as String,
+      ownerId: fields[2] as String,
+      sharedUserIds: (fields[3] as List).cast<String>(),
+      createdAt: fields[4] as DateTime,
+      lastModified: fields[5] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, ProjectModel obj) {
     writer
-      ..writeByte(2)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.name);
+      ..write(obj.name)
+      ..writeByte(2)
+      ..write(obj.ownerId)
+      ..writeByte(3)
+      ..write(obj.sharedUserIds)
+      ..writeByte(4)
+      ..write(obj.createdAt)
+      ..writeByte(5)
+      ..write(obj.lastModified);
   }
 
   @override

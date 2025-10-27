@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../providers/performance_initialization_providers.dart';
+import '../../../../providers/auth_providers.dart'; // 🔧 USER SEPARATION: Import for currentUserProvider
+import '../../../../providers/project_providers.dart'; // 🔧 USER SEPARATION: Import for projectsProvider
+import '../../../../providers/section_providers.dart'; // 🔧 USER SEPARATION: Import for sectionsByProjectProvider
+import '../../../../providers/todo_providers.dart'; // 🔧 USER SEPARATION: Import for todoListProvider
 import '../../../../backend/utils/date_utils.dart' as app_date_utils;
+import '../../../../backend/models/project_model.dart'; // 🔧 MISSING IMPORT: Add ProjectModel import
 import '../../../../backend/models/section_model.dart';
 import '../../todo/todo_item.dart';
 import '../../todo/add_task_widget.dart';
+import '../../shared_project/shared_project_indicator.dart'; // ✅ NEW: Import SharedProjectIndicator
 
 class ProjectSectionWidget extends ConsumerStatefulWidget {
   final String projectId;
@@ -44,19 +50,62 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
 
   @override
   Widget build(BuildContext context) {
-    /// ⭐ RIVERPOD LEVEL 2: Multiple Provider Watching
-    /// These ref.watch() calls make widget reactive to data changes:
-    final projectBox = ref.watch(projectBoxProvider); // Project data
-    final sectionBox = ref.watch(sectionBoxProvider); // Section data
-    final todoBox = ref.watch(todoBoxProvider); // Todo data
-    /// Widget rebuilds automatically when any box content changes
+    /// ⭐ RIVERPOD LEVEL 2: Multiple Provider Watching với USER SEPARATION
+    /// 🔧 USER SEPARATION: Sử dụng providers đã có user filtering
+    final projects = ref.watch(projectsProvider); // 🔧 USER FILTERED: Chỉ projects của current user
+    final sections = ref.watch(sectionsByProjectProvider(widget.projectId)); // 🔧 USER FILTERED: Chỉ sections của current user trong project này
 
-    final project = projectBox.get(widget.projectId);
-    final sections = sectionBox.values
-        .where((section) => section.projectId == widget.projectId)
-        .toList();
+    // ✅ CHANGED: Use filtered todos instead of regular todos to support member filtering
+    final todos = ref.watch(filteredTodoListProvider); // 🔧 USER FILTERED + MEMBER FILTERED: Chỉ todos của current user và filtered by selected member
 
-    final allProjectTodos = todoBox.values
+    // 🔧 USER SEPARATION: Handle case khi project không tồn tại hoặc không thuộc về current user
+    ProjectModel? project;
+    try {
+      project = projects.firstWhere(
+        (p) => p.id == widget.projectId,
+      );
+    } catch (e) {
+      // Project not found hoặc không thuộc về current user
+      print('⚠️ Project ${widget.projectId} not found or not owned by current user');
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Project not found',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This project may not exist or you don\'t have permission to access it.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // Navigate back to Today view
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                },
+                icon: const Icon(Icons.home),
+                label: const Text('Go to Today'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final allProjectTodos = todos
         .where((todo) => todo.projectId == widget.projectId)
         .toList();
 
@@ -84,7 +133,7 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildSectionsTab(context, sections, todoBox),
+              _buildSectionsTab(context, sections, todos),
               _buildTodayTab(context, todayTodos),
               // Removed _buildAllTasksTab
             ],
@@ -136,6 +185,12 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
                   ),
                 ),
               ),
+              // ✅ NEW: Shared Project Indicator - biểu tượng nhóm bên cạnh tên project
+              if (project != null)
+                SharedProjectIndicator(
+                  projectId: project.id,
+                  projectName: project.name,
+                ),
             ],
           ),
 
@@ -239,7 +294,7 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
     );
   }
 
-  Widget _buildSectionsTab(BuildContext context, List sections, todoBox) {
+  Widget _buildSectionsTab(BuildContext context, List sections, todos) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: sections.length + 1,
@@ -251,7 +306,7 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
 
         // Sections start from index 1
         final section = sections[index - 1];
-        final sectionTodos = todoBox.values
+        final sectionTodos = todos
             .where(
               (todo) =>
                   todo.sectionId == section.id &&
@@ -485,14 +540,22 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
   }
 
   void _addSection(String name) {
-    final sectionBox = ref.read(enhancedSectionBoxProvider);
-    final newSection = SectionModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name,
-      projectId: widget.projectId,
-    );
-    sectionBox.put(newSection.id, newSection);
-    setState(() {});
+    // 🔧 USER SEPARATION: Sử dụng SectionListNotifier thay vì raw box
+    final currentUser = ref.read(currentUserProvider);
+
+    if (currentUser == null) {
+      print('❌ Cannot add section: No current user');
+      return;
+    }
+
+    try {
+      // Sử dụng SectionListNotifier đã có user separation logic
+      final sectionNotifier = ref.read(sectionListNotifierProvider(widget.projectId).notifier);
+      sectionNotifier.addSection(name);
+      print('🔍 Added section "$name" to project ${widget.projectId} for user: ${currentUser.id}');
+    } catch (e) {
+      print('❌ Error adding section: $e');
+    }
   }
 
   void _showRenameSectionDialog(BuildContext context, SectionModel section) {
@@ -574,28 +637,32 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
   }
 
   void _deleteSection(String sectionId) {
-    final sectionBox = ref.read(enhancedSectionBoxProvider);
-    final todoBox = ref.read(todoBoxProvider);
+    print('🔍 Deleting section: $sectionId');
 
-    // Delete all tasks in this section
-    final tasksToDelete = todoBox.values
-        .where((todo) => todo.sectionId == sectionId)
-        .toList();
+    // ✅ RIVERPOD PATTERN: Use StateNotifier instead of direct box manipulation
+    ref.read(sectionListNotifierProvider(widget.projectId).notifier)
+        .deleteSection(sectionId);
 
-    for (final task in tasksToDelete) {
-      // Find and delete by key
-      final keys = todoBox.keys.toList();
-      for (final key in keys) {
-        final todoValue = todoBox.get(key);
-        if (todoValue?.id == task.id) {
-          todoBox.delete(key);
-          break;
-        }
-      }
+    // ✅ ENHANCED: Force UI refresh by invalidating providers
+    try {
+      ref.invalidate(sectionsByProjectProvider(widget.projectId));
+      ref.invalidate(todoListProvider);
+      ref.invalidate(allSectionsProvider);
+      print('🔄 Invalidated providers after deleting section');
+    } catch (e) {
+      print('⚠️ Error invalidating providers: $e');
     }
 
-    // Delete the section
-    sectionBox.delete(sectionId);
-    setState(() {});
+    // ✅ ENHANCED: Close any expanded sections
+    setState(() {
+      if (_expandedSectionId == sectionId) {
+        _expandedSectionId = null;
+      }
+      if (_addingTaskToSectionId == sectionId) {
+        _addingTaskToSectionId = null;
+      }
+    });
+
+    print('🔄 Section deletion completed');
   }
 }

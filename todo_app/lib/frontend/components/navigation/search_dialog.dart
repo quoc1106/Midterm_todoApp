@@ -182,7 +182,7 @@ class _SearchDialogState extends ConsumerState<SearchDialog>
                       controller: _controller,
                       focusNode: _focusNode,
                       decoration: InputDecoration(
-                        hintText: 'Tìm kiếm tasks, projects, sections...',
+                        hintText: 'Search tasks & projects...',
                         hintStyle: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant,
                           fontSize: 16,
@@ -205,7 +205,7 @@ class _SearchDialogState extends ConsumerState<SearchDialog>
                                     _selectedIndex = 0;
                                   });
                                 },
-                                tooltip: 'Xóa tìm kiếm',
+                                tooltip: 'Clear search',
                               )
                             : null,
                       ),
@@ -251,52 +251,46 @@ class _SearchDialogState extends ConsumerState<SearchDialog>
                   ),
                   child: Row(
                     children: [
-                      // Always show cancel button with better design
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: () => Navigator.of(context).pop(),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.red.withOpacity(0.3),
-                              ),
-                              color: Colors.red.withOpacity(0.1),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.close_rounded,
-                                  size: 16,
-                                  color: Colors.red,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Hủy',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
+                      // Results count moved to left
                       Text(
-                        '${results.length} kết quả',
+                        '${results.length} results',
                         style: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant,
                           fontSize: 12,
+                        ),
+                      ),
+
+                      // Center the cancel button
+                      Expanded(
+                        child: Center(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: () => Navigator.of(context).pop(),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.red.withOpacity(0.3),
+                                  ),
+                                  color: Colors.red.withOpacity(0.1),
+                                ),
+                                child: Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -337,7 +331,7 @@ class _SearchDialogState extends ConsumerState<SearchDialog>
             const SizedBox(height: 20),
           ],
           Text(
-            'Mẹo tìm kiếm',
+            'Search Tips',
             style: TextStyle(
               color: theme.colorScheme.onSurfaceVariant,
               fontSize: 12,
@@ -346,9 +340,8 @@ class _SearchDialogState extends ConsumerState<SearchDialog>
             ),
           ),
           const SizedBox(height: 12),
-          _buildTip(theme, Icons.task_outlined, 'Tìm kiếm theo tên task'),
-          _buildTip(theme, Icons.folder_outlined, 'Tìm kiếm theo tên project'),
-          _buildTip(theme, Icons.label_outlined, 'Tìm kiếm theo tên section'),
+          _buildTip(theme, Icons.task_outlined, 'Search by task name'),
+          _buildTip(theme, Icons.folder_outlined, 'Search by project name'),
         ],
       ),
     );

@@ -17,6 +17,9 @@ class Todo {
     this.dueDate,
     this.projectId,
     this.sectionId,
+    this.ownerId,
+    this.assignedToId, // ✅ NEW: Người được assign task
+    this.assignedToDisplayName, // ✅ NEW: Cache tên người được assign
   });
 
   @HiveField(0)
@@ -31,6 +34,12 @@ class Todo {
   final String? projectId;
   @HiveField(5)
   final String? sectionId;
+  @HiveField(6)
+  final String? ownerId; // Optional owner id (user id) to namespace todos per user
+  @HiveField(7)
+  final String? assignedToId; // ✅ NEW: Người thực hiện task
+  @HiveField(8)
+  final String? assignedToDisplayName; // ✅ NEW: Cache tên người được assign
 
   /// ✅ BUSINESS LOGIC METHODS - Pure backend logic
 
@@ -120,8 +129,13 @@ class Todo {
     DateTime? dueDate,
     String? projectId,
     String? sectionId,
+    String? ownerId,
+    String? assignedToId, // ✅ NEW: Người được assign task
+    String? assignedToDisplayName, // ✅ NEW: Tên người được assign
     bool projectIdSetToNull = false,
     bool sectionIdSetToNull = false,
+    bool ownerIdSetToNull = false,
+    bool assignedToIdSetToNull = false, // ✅ NEW: Clear assignment
   }) {
     return Todo(
       id: id ?? this.id,
@@ -130,8 +144,20 @@ class Todo {
       dueDate: dueDate ?? this.dueDate,
       projectId: projectIdSetToNull ? null : (projectId ?? this.projectId),
       sectionId: sectionIdSetToNull ? null : (sectionId ?? this.sectionId),
+      ownerId: ownerIdSetToNull ? null : (ownerId ?? this.ownerId),
+      assignedToId: assignedToIdSetToNull ? null : (assignedToId ?? this.assignedToId), // ✅ Clear when needed
+      assignedToDisplayName: assignedToIdSetToNull ? null : (assignedToDisplayName ?? this.assignedToDisplayName), // ✅ Clear name too
     );
   }
+
+  /// ✅ NEW: Assignment business logic
+  bool get isAssigned => assignedToId != null;
+
+  bool isAssignedTo(String userId) => assignedToId == userId;
+
+  String get assignmentDisplay => assignedToDisplayName ?? 'Unassigned';
+
+  bool canBeAssignedTo(String userId) => true; // All project members can be assigned
 
   @override
   bool operator ==(Object other) =>
@@ -143,5 +169,5 @@ class Todo {
 
   @override
   String toString() =>
-      'Todo(id: $id, description: $description, completed: $completed)';
+      'Todo(id: $id, description: $description, completed: $completed, ownerId: $ownerId)';
 }

@@ -9,8 +9,14 @@ import 'package:flutter/material.dart' hide DateUtils;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../providers/todo_providers.dart';
+import '../../../providers/project_providers.dart'; // ✅ ADD: Import project providers
+import '../../../providers/section_providers.dart'; // ✅ ADD: Import section providers
+import '../../../providers/shared_project_providers.dart'; // ✅ NEW: Import shared project providers
+import '../../../providers/auth_providers.dart'; // ✅ NEW: Import auth providers cho currentUserProvider
 import '../../../providers/performance_initialization_providers.dart';
 import '../../../backend/utils/date_utils.dart' as AppDateUtils;
+import '../../../backend/models/user.dart'; // ✅ NEW: Import User model
+import '../task_assignment/assign_user_dropdown.dart'; // ✅ NEW: Import assignment components
 
 class AddTaskWidget extends ConsumerStatefulWidget {
   final DateTime? presetDate;
@@ -46,6 +52,9 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
   String? _localProjectId;
   String? _localSectionId;
   bool _useLocalState = false;
+
+  // ✅ NEW: Local state for task assignment
+  String? _assignedUserId;
 
   @override
   void initState() {
@@ -92,7 +101,7 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
     super.dispose();
   }
 
-  /// ⭐ LEVEL 2: Smart Submit Logic
+  /// ⭐ LEVEL 2: Smart Submit Logic với Assignment Support
   void _submitTask() {
     final content = _textController.text.trim();
     if (content.isEmpty) return;
@@ -120,24 +129,38 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
       }
     }
 
-    /// ⭐ LEVEL 2: Add Task Through Provider with project/section
+    /// ✅ NEW: Get assigned user display name for caching
+    String? assignedToDisplayName;
+    if (_assignedUserId != null) {
+      assignedToDisplayName = ref.read(userDisplayNameProvider(_assignedUserId!));
+    }
+
+    /// ⭐ LEVEL 2: Add Task Through Provider với assignment support
     ref
         .read(todoListProvider.notifier)
-        .add(
+        .addWithAssignment(
           content,
           dueDate: selectedDate,
           projectId: selectedProjectId,
           sectionId: selectedSectionId,
+          assignedToId: _assignedUserId,
+          assignedToDisplayName: assignedToDisplayName,
         );
 
-    /// ⭐ LEVEL 1: Reset and Cleanup
+    /// ⭐ LEVEL 1: Reset and Cleanup - CHỈ CLEAR TEXT, KHÔNG TẮT WIDGET
     _textController.clear();
-    ref.invalidate(newTodoDateProvider);
-    // Don't reset project/section selection - keep for next task
-    // ref.invalidate(newTodoProjectIdProvider);
-    // ref.invalidate(newTodoSectionIdProvider);
+    // ✅ NEW: Reset assignment
+    setState(() {
+      _assignedUserId = null;
+    });
 
-    /// Callbacks
+    // Reset focus to text field for next task
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+
+
+    /// Callbacks - Gọi callback nhưng KHÔNG đóng widget
     if (widget.onTaskAdded != null) {
       widget.onTaskAdded!();
     }
@@ -191,8 +214,8 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
                     // First row: Date and Project/Section with better flex
                     Row(
                       children: [
-                        /// Date picker for non-today views
-                        if (currentView != SidebarItem.today) ...[
+                        /// Date picker for non-today views OR when presetDate is provided (overlay context)
+                        if (currentView != SidebarItem.today || widget.presetDate != null) ...[
                           Flexible(
                             flex: 1,
                             child: _buildDatePicker(context, selectedDate),
@@ -207,6 +230,10 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
                         ),
                       ],
                     ),
+
+                    // ✅ NEW: Assignment section for shared projects
+                    _buildAssignmentSection(context),
+
                     const SizedBox(height: 12),
 
                     // Second row: Action buttons
@@ -217,22 +244,31 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
                   ],
                 );
               } else {
-                // Horizontal layout for wider screens with intrinsic sizing
-                return Row(
+                // ✅ FIXED: Horizontal layout with Assignment section for wider screens
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    /// Date picker for non-today views
-                    if (currentView != SidebarItem.today) ...[
-                      _buildDatePicker(context, selectedDate),
-                      const SizedBox(width: 8),
-                    ],
+                    // First row: Date, Project/Section, and Action buttons
+                    Row(
+                      children: [
+                        /// Date picker for non-today views OR when presetDate is provided (overlay context)
+                        if (currentView != SidebarItem.today || widget.presetDate != null) ...[
+                          _buildDatePicker(context, selectedDate),
+                          const SizedBox(width: 8),
+                        ],
 
-                    /// Project/Section picker with intrinsic width
-                    IntrinsicWidth(child: _buildProjectSectionPicker(context)),
+                        /// Project/Section picker with intrinsic width
+                        IntrinsicWidth(child: _buildProjectSectionPicker(context)),
 
-                    const Spacer(),
+                        const Spacer(),
 
-                    /// Action buttons
-                    _buildActionButtons(context),
+                        /// Action buttons
+                        _buildActionButtons(context),
+                      ],
+                    ),
+
+                    // ✅ NEW: Assignment section for desktop layout too
+                    _buildAssignmentSection(context),
                   ],
                 );
               }
@@ -340,8 +376,51 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
     );
   }
 
-  /// ⭐ LEVEL 2: Smart Cancel Logic
+  /// ⭐ LEVEL 2: Smart Cancel Logic with confirmation
   void _handleCancel() {
+    // Check if user has entered any content
+    final hasContent = _textController.text.trim().isNotEmpty;
+
+    if (hasContent) {
+      // Show confirmation dialog if user has entered content
+      _showCancelConfirmationDialog();
+    } else {
+      // Proceed with cancel if no content
+      _performCancel();
+    }
+  }
+
+  /// ⭐ CANCEL CONFIRMATION DIALOG
+  void _showCancelConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard Task?'),
+        content: const Text(
+          'You have unsaved changes. Are you sure you want to discard this task?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Keep Editing'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close dialog
+              _performCancel(); // Perform cancel
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ⭐ PERFORM CANCEL ACTION
+  void _performCancel() {
     if (widget.onCancel != null) {
       // Case 1: Section/Date specific add task - close the form
       widget.onCancel!();
@@ -532,8 +611,8 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
                 child: SingleChildScrollView(
                   child: Consumer(
                     builder: (context, ref, child) {
-                      final projectBox = ref.watch(projectBoxProvider);
-                      final projects = projectBox.values.toList();
+                      // ✅ FIX: Use filtered provider instead of direct box access
+                      final projects = ref.watch(projectsProvider);
 
                       if (projects.isEmpty) {
                         return const ListTile(
@@ -550,15 +629,8 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
                             children: [
                               Consumer(
                                 builder: (context, ref, child) {
-                                  final sectionBox = ref.watch(
-                                    enhancedSectionBoxProvider,
-                                  );
-                                  final sections = sectionBox.values
-                                      .where(
-                                        (section) =>
-                                            section.projectId == project.id,
-                                      )
-                                      .toList();
+                                  // ✅ FIX: Use filtered provider instead of direct box access
+                                  final sections = ref.watch(sectionsByProjectProvider(project.id));
 
                                   if (sections.isEmpty) {
                                     return const ListTile(
@@ -626,6 +698,219 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
         ],
       ),
     );
+  }
+
+  /// ⭐ LEVEL 2: Assignment Section Builder - COMPACT DESIGN LIKE PROJECT/DATE SELECTOR
+  Widget _buildAssignmentSection(BuildContext context) {
+    // Get current project ID to check if it's a shared project
+    final selectedProjectId = _useLocalState
+        ? _localProjectId
+        : ref.watch(newTodoProjectIdProvider);
+
+    // Only show assignment section if we have a project selected
+    if (selectedProjectId == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Check if project is shared OR has potential for assignment
+    final isShared = ref.watch(isSharedProjectProvider(selectedProjectId));
+    final assignableUsers = ref.watch(assignableUsersInProjectProvider(selectedProjectId));
+
+    // Show assignment section if project is shared OR has assignable users
+    final shouldShowAssignment = isShared || assignableUsers.isNotEmpty;
+
+    if (!shouldShowAssignment) {
+      return const SizedBox.shrink();
+    }
+
+    // Get current assigned user for display
+    String assigneeDisplay = 'Unassigned';
+    if (_assignedUserId != null) {
+      final assignedUser = assignableUsers.cast<User?>().firstWhere(
+        (user) => user?.id == _assignedUserId,
+        orElse: () => null,
+      );
+      if (assignedUser != null) {
+        assigneeDisplay = assignedUser.displayName;
+      }
+    }
+
+    // ✅ NEW: Compact assignment selector like project/date picker
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      height: 48,
+      child: InkWell(
+        onTap: () => _showAssignmentDialog(context, assignableUsers),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.person_outline,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  assigneeDisplay,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: _assignedUserId != null
+                        ? Theme.of(context).colorScheme.onSurface
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (isShared) ...[
+                Icon(
+                  Icons.group,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '(${assignableUsers.length})',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              Icon(
+                Icons.arrow_drop_down,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// ✅ NEW: Show assignment dialog with user list
+  void _showAssignmentDialog(BuildContext context, List<dynamic> assignableUsers) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Assignee'),
+        content: SizedBox(
+          width: 300,
+          height: 400,
+          child: Column(
+            children: [
+              // Unassigned option
+              ListTile(
+                leading: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'UN',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                title: const Text('Unassigned'),
+                selected: _assignedUserId == null,
+                onTap: () {
+                  setState(() {
+                    _assignedUserId = null;
+                  });
+                  Navigator.of(context).pop();
+                },
+              ),
+              const Divider(),
+              // User list
+              Expanded(
+                child: ListView.builder(
+                  itemCount: assignableUsers.length,
+                  itemBuilder: (context, index) {
+                    final user = assignableUsers[index];
+                    return ListTile(
+                      leading: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: _generateAvatarColor(user.id),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            _getInitials(user.displayName),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      title: Text(user.displayName),
+                      subtitle: Text('@${user.username}'),
+                      selected: _assignedUserId == user.id,
+                      onTap: () {
+                        setState(() {
+                          _assignedUserId = user.id;
+                        });
+                        Navigator.of(context).pop();
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper methods for avatar generation
+  String _getInitials(String name) {
+    if (name.isEmpty) return 'U';
+    List<String> nameParts = name.trim().split(' ');
+    if (nameParts.length == 1) {
+      return nameParts[0].substring(0, 1).toUpperCase();
+    } else {
+      return (nameParts[0].substring(0, 1) + nameParts[1].substring(0, 1)).toUpperCase();
+    }
+  }
+
+  Color _generateAvatarColor(String input) {
+    int hash = input.hashCode;
+    List<Color> colors = [
+      Colors.blue[600]!,
+      Colors.green[600]!,
+      Colors.orange[600]!,
+      Colors.purple[600]!,
+      Colors.teal[600]!,
+      Colors.indigo[600]!,
+      Colors.pink[600]!,
+      Colors.cyan[600]!,
+    ];
+    return colors[hash.abs() % colors.length];
   }
 }
 

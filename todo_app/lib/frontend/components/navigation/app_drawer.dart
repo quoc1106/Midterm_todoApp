@@ -21,11 +21,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Backend imports
 import '../../../providers/todo_providers.dart';
 import '../../../providers/search_providers.dart';
+import '../../../providers/invitation_providers.dart'; // ✅ NEW: Import invitation providers
 
 // Frontend component imports
 import '../project/widgets/project_sidebar_widget.dart';
 import '../theme/theme_toggle_widget.dart';
+import '../auth/user_profile_dropdown.dart';
+import '../notifications/notification_badge.dart'; // ✅ NEW: Import notification components
+import '../notifications/notification_dialog.dart'; // ✅ UPDATED: Use notification dialog instead of panel
 import 'search_dialog.dart';
+import 'add_task_overlay.dart';
 
 /// ⭐ LEVEL 2-3: Navigation Drawer with Provider Integration
 ///
@@ -33,11 +38,16 @@ import 'search_dialog.dart';
 /// - Multi-provider state coordination for navigation
 /// - Dynamic content rendering based on provider state
 /// - Clean integration with search and theme systems
-class AppDrawer extends ConsumerWidget {
+class AppDrawer extends ConsumerStatefulWidget {
   const AppDrawer({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends ConsumerState<AppDrawer> {
+  @override
+  Widget build(BuildContext context) {
     /// ⭐ PROVIDER COORDINATION: Multiple providers for navigation state
     final selectedItem = ref.watch(sidebarItemProvider);
     final todayCount = ref.watch(todayTodoCountProvider);
@@ -51,12 +61,32 @@ class AppDrawer extends ConsumerWidget {
             decoration: const BoxDecoration(color: Color(0xFF2C2C2C)),
             child: Row(
               children: [
-                const Expanded(
-                  child: Text(
-                    'Todoist Demo',
-                    style: TextStyle(color: Colors.white, fontSize: 24),
+                // ✅ Thu nhỏ vùng UserProfileDropdown để có chỗ cho notification
+                Expanded(
+                  flex: 3, // Giảm tỷ lệ để thu nhỏ vùng user profile
+                  child: UserProfileDropdown(),
+                ),
+                const SizedBox(width: 8), // ✅ Add spacing between elements
+
+                // ✅ NEW: Real Notification System với NotificationBadge
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: NotificationBadge(
+                    onTap: () => _openNotificationDialog(context),
+                    child: IconButton(
+                      icon: const Icon(Icons.notifications_outlined, color: Colors.white, size: 20),
+                      onPressed: () => _openNotificationDialog(context),
+                      tooltip: 'Thông báo',
+                      iconSize: 20,
+                    ),
                   ),
                 ),
+
+                const SizedBox(width: 4), // ✅ Reduce spacing before close button
+
                 // Close button for all screen sizes with better design
                 Container(
                   decoration: BoxDecoration(
@@ -103,6 +133,43 @@ class AppDrawer extends ConsumerWidget {
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          /// ⭐ ADD TASK BUTTON: Thêm mục Add Task ở đầu
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Material(
+              borderRadius: BorderRadius.circular(12),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _openAddTaskOverlay(context, ref),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.add_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Add Task',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -209,5 +276,34 @@ class AppDrawer extends ConsumerWidget {
         // Widget was disposed, ignore
       }
     });
+  }
+
+  /// ⭐ ADD TASK OVERLAY: Open full-screen add task overlay with slide animation
+  void _openAddTaskOverlay(BuildContext context, WidgetRef ref) {
+    // Close drawer first
+    Navigator.pop(context);
+
+    // Open add task overlay with slide animation
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => const AddTaskOverlay(),
+        transitionDuration: Duration.zero, // We handle animation internally
+        barrierDismissible: true,
+        barrierColor: Colors.transparent,
+        opaque: false,
+      ),
+    );
+  }
+
+  /// ⭐ NOTIFICATION DIALOG: Open notification dialog with animation like search
+  void _openNotificationDialog(BuildContext context) {
+    // Close drawer first
+    Navigator.pop(context);
+
+    // Open notification dialog with same animation as search
+    showDialog(
+      context: context,
+      builder: (context) => const NotificationDialog(),
+    );
   }
 }

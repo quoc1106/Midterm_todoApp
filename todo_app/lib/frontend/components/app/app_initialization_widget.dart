@@ -1,12 +1,13 @@
-/// 🚀 FRONTEND COMPONENTS - App Initialization Widget (SIMPLE VERSION)
+/// 🚀 FRONTEND COMPONENTS - App Initialization Widget (AUTH INTEGRATED)
 ///
-/// ⭐ SIMPLIFIED FOR IMMEDIATE USAGE ⭐
-/// Simple App-Level State Management without Migration complexity
+/// ⭐ AUTHENTICATION INTEGRATED VERSION ⭐
+/// App-Level State Management với Authentication System
+/// Integrates AuthWrapper cho user session management
 ///
-/// SIMPLIFIED APPROACH:
-/// - Skip migration for first install
-/// - Direct initialization without version checks
-/// - Clean startup experience
+/// RIVERPOD PATTERNS APPLIED:
+/// - Level 3: FutureProvider for async initialization
+/// - Level 2: StateNotifierProvider for authentication
+/// - Level 1: Provider for theme management
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,20 +17,21 @@ import '../../../providers/theme_providers.dart';
 import '../../screens/todo_screen.dart';
 import '../layout/app_loading_screen.dart';
 import '../layout/app_error_screen.dart';
+import '../auth/auth_wrapper.dart';
 
-/// ⭐ SIMPLIFIED: App Root Widget for Immediate Usage
+/// ⭐ AUTH INTEGRATED: App Root Widget với Authentication
 ///
 /// DEMONSTRATES:
-/// - Simple FutureProvider coordination
-/// - Basic theme provider integration
-/// - Direct app initialization without migration complexity
+/// - Authentication-aware initialization
+/// - User session management
+/// - Multi-user data separation
 class AppInitializationWidget extends ConsumerWidget {
   const AppInitializationWidget({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    /// ⭐ SIMPLIFIED: Basic Provider Watching
-    /// Simple provider coordination without migration complexity
+    /// ⭐ RIVERPOD LEVEL 3: FutureProvider coordination
+    /// Authentication-aware provider watching
 
     AsyncValue<dynamic>? initializationAsync;
     ThemeMode themeMode = ThemeMode.system;
@@ -37,7 +39,7 @@ class AppInitializationWidget extends ConsumerWidget {
     ThemeData? darkTheme;
 
     try {
-      // PROVIDER 1: Basic initialization
+      // PROVIDER 1: Core initialization với auth support
       initializationAsync = ref.watch(performanceAwareInitProvider);
     } catch (e, stackTrace) {
       print('🔧 FIX: Core provider error: $e');
@@ -56,20 +58,21 @@ class AppInitializationWidget extends ConsumerWidget {
       darkTheme = ThemeData.dark();
     }
 
-    /// ⭐ SIMPLIFIED: Basic Error Recovery
+    /// ⭐ AUTH INTEGRATED: Error recovery với auth state preservation
     void handleInitializationRetry() {
       try {
         ref.invalidate(performanceAwareInitProvider);
         ref.invalidate(themeModeProvider);
         ref.invalidate(lightThemeProvider);
         ref.invalidate(darkThemeProvider);
+        // Don't invalidate auth providers để preserve user session
       } catch (e) {
         print('🔧 FIX: Error during provider invalidation: $e');
       }
     }
 
     return MaterialApp(
-      title: 'Todo App - Simplified Launch',
+      title: 'Todo App - Multi-User System',
 
       /// ⭐ Theme Integration
       theme: lightTheme ?? ThemeData.light(),
@@ -80,7 +83,7 @@ class AppInitializationWidget extends ConsumerWidget {
 
       home: Stack(
         children: [
-          /// ⭐ SIMPLIFIED: Direct Initialization
+          /// ⭐ AUTH INTEGRATED: Authentication-aware initialization
           if (initializationAsync != null)
             initializationAsync.when(
               // LOADING: Show loading screen
@@ -97,13 +100,16 @@ class AppInitializationWidget extends ConsumerWidget {
                 },
               ),
 
-              // SUCCESS: Show main app
-              data: (initData) => const TodoScreen(),
+              // SUCCESS: Show app với authentication wrapper
+              data: (initData) => const AuthWrapper(
+                child: TodoScreen(),
+              ),
             )
           else
-            const AppLoadingScreen(),
-
-          /// Performance indicator now moved to AppBar in TodoScreen
+            // Fallback: Direct auth wrapper nếu initialization fails
+            const AuthWrapper(
+              child: TodoScreen(),
+            ),
         ],
       ),
     );
