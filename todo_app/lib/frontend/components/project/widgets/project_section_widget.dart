@@ -5,12 +5,14 @@ import '../../../../providers/auth_providers.dart'; // 🔧 USER SEPARATION: Imp
 import '../../../../providers/project_providers.dart'; // 🔧 USER SEPARATION: Import for projectsProvider
 import '../../../../providers/section_providers.dart'; // 🔧 USER SEPARATION: Import for sectionsByProjectProvider
 import '../../../../providers/todo_providers.dart' show projectTodosProvider, sectionListNotifierProvider, allSectionsProvider, todoListProvider; // ✅ FIXED: Import projectTodosProvider
+import '../../../../providers/task_filtering_providers.dart'; // ✅ NEW: Import for filteredTasksByMemberProvider
 import '../../../../backend/utils/date_utils.dart' as app_date_utils;
 import '../../../../backend/models/project_model.dart'; // 🔧 MISSING IMPORT: Add ProjectModel import
 import '../../../../backend/models/section_model.dart';
 import '../../todo/todo_item.dart';
 import '../../todo/add_task_widget.dart';
 import '../../shared_project/shared_project_indicator.dart'; // ✅ NEW: Import SharedProjectIndicator
+import 'project_section_today_filter.dart'; // ✅ NEW: Import the filter widget
 
 class ProjectSectionWidget extends ConsumerStatefulWidget {
   final String projectId;
@@ -55,9 +57,9 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
     final projects = ref.watch(projectsProvider); // 🔧 USER FILTERED: Chỉ projects của current user
     final sections = ref.watch(sectionsByProjectProvider(widget.projectId)); // 🔧 USER FILTERED: Chỉ sections của current user trong project này
 
-    // ✅ CHANGED: Use projectTodosProvider instead of filteredTodoListProvider for Project/Section views
-    // This shows ALL tasks in the project, not just tasks assigned to current user
-    final todos = ref.watch(projectTodosProvider); // 🔧 PROJECT VIEW: Show ALL tasks in accessible projects
+    // ✅ FIXED: Use projectTasksWithFilterProvider for shared workspace collaboration
+    // This shows ALL tasks in project (for team collaboration) with optional member filtering
+    final todos = ref.watch(projectTasksWithFilterProvider(widget.projectId)); // 🔧 SHARED WORKSPACE: Show all team tasks
 
     // 🔧 USER SEPARATION: Handle case khi project không tồn tại hoặc không thuộc về current user
     ProjectModel? project;
@@ -285,11 +287,14 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
   }
 
   Widget _buildTabBar(BuildContext context, int sectionCount, int todayCount) {
+    // ✅ NEW: Use filtered today tasks count instead of basic count
+    final filteredTodayCount = ref.watch(projectSectionTodayTasksProvider(widget.projectId)).length;
+
     return TabBar(
       controller: _tabController,
       tabs: [
         Tab(text: 'Sections ($sectionCount)'),
-        Tab(text: 'Today ($todayCount)'),
+        Tab(text: 'Today ($filteredTodayCount)'),
         // Removed "All Tasks" tab
       ],
     );
@@ -321,16 +326,53 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
   }
 
   Widget _buildTodayTab(BuildContext context, List todayTodos) {
-    if (todayTodos.isEmpty) {
-      return Center(child: Text('No tasks for today'));
-    }
+    // ✅ NEW: Use filtered today tasks instead of basic today todos
+    final filteredTodayTasks = ref.watch(projectSectionTodayTasksProvider(widget.projectId));
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: todayTodos.length,
-      itemBuilder: (context, index) {
-        return TodoItem(todo: todayTodos[index]);
-      },
+    return Column(
+      children: [
+        // ✅ NEW: Add filter widget at the top
+        ProjectSectionTodayFilter(projectId: widget.projectId),
+
+        // Content area
+        Expanded(
+          child: filteredTodayTasks.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.today_outlined,
+                        size: 64,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No tasks for today',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tasks scheduled for today will appear here',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filteredTodayTasks.length,
+                  itemBuilder: (context, index) {
+                    return TodoItem(todo: filteredTodayTasks[index]);
+                  },
+                ),
+        ),
+      ],
     );
   }
 

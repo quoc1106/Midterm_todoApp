@@ -5,6 +5,7 @@ import 'package:hive/hive.dart';
 import 'performance_initialization_providers.dart';
 import 'auth_providers.dart'; // for currentUserProvider
 import 'project_providers.dart'; // for projectsProvider
+import 'section_providers.dart'; // ✅ FIXED: Import section providers for sectionsByProjectProvider
 
 // Provider lưu trạng thái ngày đầu tuần hiện tại để chuyển tuần (Riverpod)
 final upcomingWeekStartProvider = StateProvider<DateTime>((ref) {
@@ -134,11 +135,11 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
   }
 
   static List<Todo> _filterByOwner(Box<Todo> box, String? ownerId) {
-    // ✅ FIXED: Filter by assignee instead of owner for Today/Upcoming views
-    // Business Logic: Users should see tasks assigned TO them, not created BY them
+    // ✅ FIXED: Only show assigned tasks in personal Today/Upcoming views
+    // Business Logic: Personal views should only show tasks assigned TO user
+    // Unassigned tasks should only appear in project/section views
     final allTodos = box.values.toList();
 
-    // Debug: Log all todos to understand the issue
     print('🔍 DEBUG: Filtering todos for user: $ownerId');
     print('🔍 DEBUG: Total todos in box: ${allTodos.length}');
 
@@ -153,19 +154,17 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
       // Guest user - only show unowned and unassigned todos
       filtered = allTodos.where((t) => t.ownerId == null && t.assignedToId == null).toList();
     } else {
-      // ✅ FIXED: Show tasks assigned TO current user, not created BY current user
-      // Business Rule: Today/Upcoming should show what user needs to work on
-      filtered = allTodos.where((t) =>
-        t.assignedToId == ownerId || // Tasks assigned to current user
-        (t.assignedToId == null && t.ownerId == ownerId) // Unassigned tasks owned by user
-      ).toList();
+      // ✅ FIXED: Only show tasks assigned TO current user in personal views
+      // Unassigned tasks (assignedToId == null) should NOT appear in Today/Upcoming
+      // They should only appear in project/section views where they can be assigned
+      filtered = allTodos.where((t) => t.assignedToId == ownerId).toList();
     }
 
     print('🔍 DEBUG: Filtered todos count: ${filtered.length}');
-    print('🔍 DEBUG: Current user can see these todos (assigned to them):');
+    print('🔍 DEBUG: Personal view shows only assigned tasks:');
     for (int i = 0; i < filtered.length && i < 3; i++) {
       final todo = filtered[i];
-      print('🔍 DEBUG: - ${todo.description} (assigned to: ${todo.assignedToId}, owner: ${todo.ownerId})');
+      print('🔍 DEBUG: - ${todo.description} (assigned to: ${todo.assignedToId})');
     }
 
     return filtered;
@@ -213,6 +212,9 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
     );
     _box.add(newTodo);
     state = _filterByOwner(_box, _currentUserId);
+
+    // ✅ CRITICAL FIX: Invalidate providers when adding tasks with assignment
+    _invalidateRelatedProviders();
     // print('🔍 Todo with assignment added. New state count: ${state.length}');
   }
 
@@ -223,6 +225,9 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
       if (todo != null) {
         _box.putAt(idx, todo.copyWith(completed: !todo.completed));
         state = _filterByOwner(_box, _currentUserId);
+
+        // ✅ CRITICAL FIX: Invalidate providers when toggling task completion
+        _invalidateRelatedProviders();
       }
     }
   }
@@ -272,7 +277,30 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
           ),
         );
         state = _filterByOwner(_box, _currentUserId);
+
+        // ✅ CRITICAL FIX: Force invalidation of ALL related providers for real-time updates
+        _invalidateRelatedProviders();
       }
+    }
+  }
+
+  // ✅ NEW: Comprehensive provider invalidation for real-time updates
+  void _invalidateRelatedProviders() {
+    try {
+      // ✅ CORE: Invalidate only providers defined in this file to avoid circular dependency
+      _ref.invalidate(projectTodosProvider);
+      _ref.invalidate(filteredTodosProvider);
+      _ref.invalidate(todayTodoCountProvider);
+
+      // ✅ ENHANCED: Invalidate project-related providers
+      final projects = _ref.read(projectsProvider);
+      for (final project in projects) {
+        _ref.invalidate(sectionsByProjectProvider(project.id));
+      }
+
+      print('🔄 INVALIDATED core providers for real-time UI updates');
+    } catch (e) {
+      print('⚠️ Error invalidating providers: $e');
     }
   }
 
@@ -293,10 +321,39 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
     }
   }
 
-  // Method để force refresh state từ box (dùng khi có external changes)
+  // ✅ ENHANCED: Method to force provider invalidation for UI updates
   void refreshFromBox() {
     state = _filterByOwner(_box, _currentUserId);
+
+    // ✅ FIXED: Invalidate related providers để cập nhật UI ngay lập tức
+    try {
+      _ref.invalidate(projectTodosProvider);
+      _ref.invalidate(filteredTodosProvider);
+
+      // ✅ NOTE: Task filtering providers will be invalidated automatically
+      // since they watch projectTodosProvider which is invalidated above
+
+      // Invalidate specific project providers if needed
+      final projects = _ref.read(projectsProvider);
+      for (final project in projects) {
+        _ref.invalidate(sectionsByProjectProvider(project.id));
+      }
+
+      print('🔄 TodoListNotifier refreshed and invalidated related providers');
+    } catch (e) {
+      print('⚠️ Error invalidating providers: $e');
+    }
+
     print('🔄 TodoListNotifier refreshed for user ($_currentUserId): ${state.length} todos');
+  }
+
+  // ✅ ENHANCED: Method to force UI update after adding task
+  void notifyUIUpdate() {
+    // Trigger state change to force UI rebuild
+    state = [...state];
+
+    // Also refresh from box to ensure consistency
+    refreshFromBox();
   }
 }
 
@@ -389,7 +446,7 @@ final sidebarItemProvider = StateProvider<SidebarItem>(
   (ref) => SidebarItem.today,
 );
 
-// Provider tính toán tiêu đề app bar dựa trên trạng thái sidebar (Provider - Riverpod)
+// Provider tính toán tiêu đề app bar dựa trên tr��ng thái sidebar (Provider - Riverpod)
 final appBarTitleProvider = Provider<String>((ref) {
   final selectedItem = ref.watch(sidebarItemProvider);
   switch (selectedItem) {
@@ -441,7 +498,7 @@ final filteredTodosProvider = Provider<List<Todo>>((ref) {
   }
 });
 
-// Provider đếm số lượng công việc cho mục Today (Provider - Riverpod)
+// Provider đếm số lượng công vi��c cho mục Today (Provider - Riverpod)
 final todayTodoCountProvider = Provider<int>((ref) {
   final todos = ref.watch(todoListProvider);
   return todos
@@ -458,27 +515,7 @@ final todayTodoCountProvider = Provider<int>((ref) {
 final newTodoProjectIdProvider = StateProvider<String?>((ref) => null);
 final newTodoSectionIdProvider = StateProvider<String?>((ref) => null);
 
-// ✅ NEW: Provider for filtered todos based on selected member
-final filteredTodoListProvider = Provider<List<Todo>>((ref) {
-  final allTodos = ref.watch(todoListProvider);
-  final selectedFilter = ref.watch(selectedMemberFilterProvider);
-
-  if (selectedFilter == null) {
-    // No filter - show all todos
-    return allTodos;
-  } else if (selectedFilter == 'unassigned') {
-    // Show only unassigned todos
-    return allTodos.where((todo) => todo.assignedToId == null).toList();
-  } else {
-    // Show only todos assigned to specific user
-    return allTodos.where((todo) => todo.assignedToId == selectedFilter).toList();
-  }
-});
-
-// ✅ NEW: Provider to track selected member filter (moved from project_members_dialog.dart)
-final selectedMemberFilterProvider = StateProvider<String?>((ref) => null);
-
-// ✅ NEW: Provider để quản lý trạng thái thu gọn/mở rộng của overdue section
+// ✅ NEW: Provider để quản lý trạng th��i thu gọn/mở rộng của overdue section
 final overdueCollapsedProvider = StateProvider<bool>((ref) => false);
 
 // ✅ NEW: Provider để lấy danh sách overdue todos

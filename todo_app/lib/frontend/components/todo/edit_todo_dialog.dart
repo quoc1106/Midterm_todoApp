@@ -10,6 +10,7 @@ import '../../../backend/models/todo_model.dart';
 import '../../../providers/todo_providers.dart';
 import '../../../providers/performance_initialization_providers.dart';
 import '../../../providers/shared_project_providers.dart'; // ✅ NEW: Import for assignment
+import '../../../providers/section_providers.dart'; // ✅ FIXED: Import for sectionsByProjectProvider
 import '../../../backend/models/project_model.dart';
 import '../../../backend/models/section_model.dart';
 import '../task_assignment/assign_user_dropdown.dart'; // ✅ NEW: Import assignment dropdown
@@ -57,7 +58,19 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
     final sectionBox = ref.watch(sectionBoxProvider);
 
     return AlertDialog(
-      title: const Text('Edit Task'), // ✅ CHANGED: English
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Edit Task'),
+          // ✅ FIXED: Icon delete kế bên chữ "EDIT TASK"
+          IconButton(
+            onPressed: _showDeleteConfirmation,
+            icon: const Icon(Icons.delete, color: Colors.red),
+            tooltip: 'Delete task',
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -91,14 +104,7 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
         ),
       ),
       actions: [
-        // ✅ NEW: Delete button (icon thùng rác đỏ)
-        IconButton(
-          onPressed: _showDeleteConfirmation,
-          icon: const Icon(Icons.delete),
-          color: Colors.red,
-          tooltip: 'Delete task', // ✅ CHANGED: English
-        ),
-        const SizedBox(width: 8),
+        // ✅ REMOVED: Delete button từ actions (đã chuyển lên title)
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'), // ✅ CHANGED: English
@@ -422,12 +428,37 @@ class _EditTodoDialogState extends ConsumerState<EditTodoDialog> {
           ),
           TextButton(
             onPressed: () {
+              // ✅ ENHANCED: Improved delete logic với provider invalidation
               ref.read(todoListProvider.notifier).delete(widget.todo.id);
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // Close the dialog and the edit screen
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('Task deleted successfully')));
+
+              // ✅ FIXED: Force invalidate providers để cập nhật UI ngay lập tức
+              ref.invalidate(projectTodosProvider);
+              if (widget.todo.projectId != null) {
+                ref.invalidate(sectionsByProjectProvider(widget.todo.projectId!));
+              }
+              ref.invalidate(todoListProvider);
+
+              // ✅ ENHANCED: Force refresh TodoListNotifier
+              ref.read(todoListProvider.notifier).notifyUIUpdate();
+
+              Navigator.of(context).pop(); // Close confirmation dialog
+              Navigator.of(context).pop(); // Close edit dialog
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text('Task "${widget.todo.description}" deleted successfully'),
+                    ],
+                  ),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
             },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],

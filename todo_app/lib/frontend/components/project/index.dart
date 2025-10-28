@@ -12,3 +12,4 @@ export 'pickers/project_section_picker_row.dart';
 export 'pickers/project_section_picker_dialog.dart';
 export 'widgets/project_sidebar_widget.dart';
 export 'widgets/project_section_widget.dart';
+export 'widgets/project_section_today_filter.dart';

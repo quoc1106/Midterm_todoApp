@@ -159,7 +159,35 @@ final sharedProjectProvider = StateNotifierProvider.family<
 
 // ✅ LEVEL 4: Provider.family cho project members
 final projectMembersProvider = Provider.family<List<ProjectMember>, String>((ref, projectId) {
-  return ref.watch(sharedProjectProvider(projectId));
+  final members = ref.watch(sharedProjectProvider(projectId));
+  final projects = ref.watch(projectsProvider);
+  final userBox = ref.watch(enhancedUserBoxProvider);
+
+  // ✅ CRITICAL FIX: Include project owner in members list
+  final project = projects.where((p) => p.id == projectId).firstOrNull;
+  if (project == null) return members;
+
+  // Check if owner is already in members list
+  final hasOwnerInMembers = members.any((m) => m.userId == project.ownerId);
+
+  if (!hasOwnerInMembers) {
+    // Add project owner as first member
+    final owner = userBox.get(project.ownerId);
+    if (owner != null) {
+      final ownerMember = ProjectMember(
+        id: 'owner_${project.ownerId}_${projectId}', // Unique ID for owner
+        projectId: projectId,
+        userId: project.ownerId,
+        userDisplayName: owner.displayName,
+        joinedAt: project.createdAt ?? DateTime.now(),
+      );
+
+      // Return owner + other members
+      return [ownerMember, ...members];
+    }
+  }
+
+  return members;
 });
 
 // ✅ LEVEL 4: Provider.family cho assignable users in project

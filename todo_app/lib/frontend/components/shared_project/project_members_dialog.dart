@@ -4,52 +4,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/shared_project_providers.dart';
-import '../../../providers/auth_providers.dart';
-import '../../../providers/todo_providers.dart';
-import '../../../providers/project_providers.dart';
+import '../../../providers/task_filtering_providers.dart'; // ✅ NEW: Import for selectedMemberFilterProvider
 import 'invite_user_widget.dart';
-import 'project_member_item.dart';
 
-// ✅ REMOVED: selectedMemberFilterProvider - now imported from todo_providers.dart
-
-// ✅ NEW: Provider to get task counts for each user in project
-final userTaskCountProvider = Provider.family<int, String>((ref, userId) {
-  final todos = ref.watch(todoListProvider);
-  return todos.where((todo) => todo.assignedToId == userId).length;
-});
-
-// ✅ FIXED: Provider to get task counts for each user in SPECIFIC project only
-final userTaskCountInProjectProvider =
-    Provider.family<int, Map<String, String>>((ref, params) {
-      final projectId = params['projectId']!;
-      final userId = params['userId']!;
-
-      final todos = ref.watch(todoListProvider);
-      return todos
-          .where(
-            (todo) =>
-                todo.projectId == projectId &&
-                todo.assignedToId == userId &&
-                !todo.completed,
-          )
-          .length;
-    });
-
-// ✅ NEW: Provider to get unassigned task count in project
-final unassignedTaskCountProvider = Provider.family<int, String>((
-  ref,
-  projectId,
-) {
-  final todos = ref.watch(todoListProvider);
-  return todos
-      .where(
-        (todo) =>
-            todo.projectId == projectId &&
-            todo.assignedToId == null &&
-            !todo.completed,
-      )
-      .length;
-});
+// ✅ REMOVED: Local providers - now using reactive providers from task_filtering_providers.dart
 
 class ProjectMembersDialog extends ConsumerWidget {
   final String projectId;
@@ -67,7 +25,11 @@ class ProjectMembersDialog extends ConsumerWidget {
       assignableUsersInProjectProvider(projectId),
     );
     final selectedFilter = ref.watch(selectedMemberFilterProvider);
-    final unassignedCount = ref.watch(unassignedTaskCountProvider(projectId));
+
+    // ✅ FIXED: Use reactive provider for real-time unassigned count updates
+    final unassignedCount = ref.watch(
+      reactiveUnassignedTaskCountProvider(projectId),
+    );
 
     return Dialog(
       backgroundColor: const Color(0xFF2D2D30),
@@ -189,8 +151,10 @@ class ProjectMembersDialog extends ConsumerWidget {
                   itemCount: assignableUsers.length,
                   itemBuilder: (context, index) {
                     final user = assignableUsers[index];
+
+                    // ✅ FIXED: Use reactive provider for real-time task count updates
                     final taskCount = ref.watch(
-                      userTaskCountInProjectProvider({
+                      reactiveUserTaskCountInProjectProvider({
                         'userId': user.id,
                         'projectId': projectId,
                       }),
@@ -209,11 +173,15 @@ class ProjectMembersDialog extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(8),
                         child: InkWell(
                           onTap: () {
+                            // ✅ FIXED: Set filter and close dialog
                             ref
                                 .read(selectedMemberFilterProvider.notifier)
                                 .state = isSelected
                                 ? null
                                 : user.id;
+
+                            // ✅ NEW: Close dialog after selecting member
+                            Navigator.of(context).pop();
                           },
                           borderRadius: BorderRadius.circular(8),
                           child: Container(
@@ -313,7 +281,10 @@ class ProjectMembersDialog extends ConsumerWidget {
             if (unassignedCount > 0) ...[
               Divider(color: Colors.white.withOpacity(0.1), height: 1),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     Icon(
@@ -346,6 +317,9 @@ class ProjectMembersDialog extends ConsumerWidget {
                     onTap: () {
                       ref.read(selectedMemberFilterProvider.notifier).state =
                           selectedFilter == 'unassigned' ? null : 'unassigned';
+
+                      // ✅ NEW: Close dialog after selecting unassigned tasks
+                      Navigator.of(context).pop();
                     },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(

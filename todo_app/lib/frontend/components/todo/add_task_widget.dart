@@ -147,6 +147,33 @@ class _AddTaskWidgetState extends ConsumerState<AddTaskWidget> {
           assignedToDisplayName: assignedToDisplayName,
         );
 
+    /// ✅ FIXED: Invalidate providers để cập nhật UI ngay lập tức
+    if (selectedProjectId != null) {
+      ref.invalidate(projectTodosProvider);
+      if (selectedSectionId != null) {
+        ref.invalidate(sectionsByProjectProvider(selectedProjectId));
+      }
+    }
+    // Force refresh todo list
+    ref.invalidate(todoListProvider);
+
+    /// ✅ FIXED: Hiển thị thông báo "Task added successfully"
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text('Task added successfully'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
     /// ⭐ LEVEL 1: Reset and Cleanup - CHỈ CLEAR TEXT, KHÔNG TẮT WIDGET
     _textController.clear();
     // ✅ NEW: Reset assignment

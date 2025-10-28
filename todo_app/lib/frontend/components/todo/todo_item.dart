@@ -124,18 +124,21 @@ class TodoItem extends ConsumerWidget {
     );
   }
 
-  /// ⭐ LEVEL 1: Simple Action Button
+  /// ⭐ LEVEL 1: Simple Action Button - CHỈ HIỂN THỊ AVATAR
   Widget _buildTrailing(BuildContext context, WidgetRef ref) {
-    /// ✅ FIXED: Show Assignee Avatar (correct business logic)
-    /// Display the avatar of the person who should work on this task
-    /// If unassigned, show the owner avatar as fallback
+    // ✅ FIXED: Chỉ hiển thị avatar, không có edit/delete buttons
+    // Edit/Delete buttons đã được chuyển vào EditTodoDialog
+    return _buildAssigneeAvatar();
+  }
 
-    final displayUserId = todo.assignedToId ?? todo.ownerId;
-    final displayUserName = todo.assignedToDisplayName;
-
+  /// ✅ NEW: Build assignee avatar widget riêng
+  Widget _buildAssigneeAvatar() {
+    // ✅ FIX: Chỉ sử dụng assignedToId, không fallback về ownerId
+    // Nếu assignedToId là null → hiển thị "UN" (unassigned)
+    // Nếu assignedToId có giá trị → hiển thị avatar của user được assign
     return AssignedUserAvatar(
-      assignedToId: displayUserId, // Show assignee if assigned, otherwise owner
-      assignedToDisplayName: displayUserName,
+      assignedToId: todo.assignedToId, // ✅ ONLY use assignedToId, no fallback
+      assignedToDisplayName: todo.assignedToDisplayName,
       size: 32,
     );
   }
