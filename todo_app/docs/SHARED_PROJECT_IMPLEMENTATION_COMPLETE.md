@@ -63,7 +63,7 @@ frontend/components/
 ├── shared_project/ (✅ NEW)
 │   ├── shared_project_indicator.dart (Biểu tượng nhóm)
 │   ├── project_members_dialog.dart (Dialog quản lý thành viên)
-│   ├── invite_user_widget.dart (Widget mời người dùng)
+│   ├── invite_user_widget.dart (Widget mời ngư���i dùng)
 │   └── project_member_item.dart (Item hiển thị thành viên)
 ├── notifications/ (✅ NEW)
 │   ├── notification_badge.dart (Badge số thông báo)
@@ -200,1072 +200,577 @@ final assignableUsersInProjectProvider = Provider.family<List<User>, String>(
 @HiveField(5) final DateTime? lastModified;
 ```
 
-### **TodoModel Fields Added**
+### **Task Assignment Fields Added**
 ```dart
-@HiveField(7) final String? assignedToId;
-@HiveField(8) final String? assignedToDisplayName;
+@HiveField(6) final String? assignedToId;
+@HiveField(7) final String? assignedToDisplayName;
 ```
 
 ---
 
-## 🔧 **TECHNICAL IMPLEMENTATION NOTES**
+## 🔧 **CRITICAL FIXES - UNASSIGNED TASK FILTERING**
 
-### **Business Logic Separation**
-- **Models**: Pure business logic, no UI dependencies
-- **Providers**: State management và reactive logic
-- **Components**: UI-only, consume providers
+### **Problem 1: Unassigned Tasks in Personal Views**
+**Issue**: Unassigned tasks were appearing in personal Today/Upcoming views when they should only appear in project/section views.
 
-### **Caching Strategy**
-- Cache `userDisplayName` trong `assignedToDisplayName`
-- Cache `projectName` trong invitation records
-- Avoid frequent database lookups
+**Root Cause**: The `_filterByOwner` method in `todo_providers.dart` was showing both assigned tasks and unassigned tasks owned by the user.
 
-### **Error Handling**
-- Validation khi gửi invitation (user exists?)
-- Permission checks (can user invite?)
-- Graceful fallbacks khi data missing
+**Solution**: Modified the filtering logic to only show tasks assigned TO the current user in personal views:
 
-### **Performance Optimizations**
-- Provider.family cho parameterized data
-- Lazy loading cho project members
-- Efficient queries với filtering
-
----
-
-## 🚧 **KNOWN LIMITATIONS & FUTURE ENHANCEMENTS**
-
-### **Current Limitations**
-1. Không có role-based permissions (owner vs member)
-2. Không có bulk invitation features
-3. Không có notification history
-4. Không có project access revocation
-
-### **Future Enhancements**
-1. **Advanced Permissions**: Read-only members, admin roles
-2. **Activity Feed**: Track project changes, assignments
-3. **Due Date Notifications**: Notify assigned users
-4. **Project Templates**: Share project structures
-5. **Mobile Optimization**: Touch-friendly assignment UI
-
----
-
-## ✅ **TESTING CHECKLIST**
-
-### **Unit Tests Needed**
-- [ ] ProjectModel business logic methods
-- [ ] InvitationNotifier state transitions
-- [ ] SharedProjectNotifier member management
-- [ ] Assignment logic validation
-
-### **Integration Tests Needed**
-- [ ] End-to-end invitation flow
-- [ ] Project sharing permissions
-- [ ] Task assignment workflow
-- [ ] Notification system
-
-### **UI Tests Needed**
-- [ ] SharedProjectIndicator visibility
-- [ ] Dialog interactions
-- [ ] Assignment dropdown functionality
-- [ ] Responsive layout behavior
-
----
-
-## 📈 **SUCCESS METRICS**
-
-### **Functional Metrics**
-- ✅ Users can share projects
-- ✅ Real-time invitation system works
-- ✅ Task assignment is functional
-- ✅ UI is intuitive and responsive
-
-### **Technical Metrics**
-- ✅ Follows established Riverpod patterns
-- ✅ Maintains clean architecture
-- ✅ Performance is acceptable
-- ✅ Error handling is comprehensive
-
-### **User Experience Metrics**
-- ✅ Workflow is smooth and logical
-- ✅ Visual indicators are clear
-- ✅ Notifications are timely
-- ✅ Mobile experience is good
-
----
-
-## 🔥 **CẬP NHẬT MỚI NHẤT - 26/10/2025**
-
-### **🐛 Khắc phục lỗi "HiveError: Box not found"**
-
-**Nguyên nhân**: Shared project system cần 2 boxes mới (`project_members`, `project_invitations`) nhưng chưa được mở trong quá trình khởi tạo app.
-
-**Giải pháp đã triển khai**:
-
-1. **Cập nhật HiveAdapterManager** (`backend/core/hive_adapters.dart`):
-   - Đăng ký adapters cho `ProjectMemberAdapter` (typeId: 11)
-   - Đăng ký adapters cho `ProjectInvitationAdapter` (typeId: 12) 
-   - Đăng ký adapters cho `InvitationStatusAdapter` (typeId: 13)
-   - Mở 6 boxes thay vì 3 boxes: todos, projects, sections, project_members, project_invitations, users
-
-2. **Cập nhật Performance Initialization Provider** (`providers/performance_initialization_providers.dart`):
-   - Thêm `Box<ProjectMember>` và `Box<ProjectInvitation>` vào `EnhancedAppInitData`
-   - Cập nhật logic khởi tạo để sử dụng 6 boxes
-   - Thêm providers: `enhancedProjectMemberBoxProvider`, `enhancedProjectInvitationBoxProvider`
-   - Cập nhật memory calculation để bao gồm shared project data
-
-3. **Sửa Invitation Providers** (`providers/invitation_providers.dart`):
-   - Cập nhật để sử dụng enhanced box providers thay vì `Hive.box()` trực tiếp
-   - Khắc phục logic sai trong `sendInvitation()` method
-   - Thêm error handling tốt hơn cho existing invitation checks
-
-### **🎨 Cải thiện UX - Notification Dialog với Animation**
-
-**Yêu cầu**: Thay đổi notification panel thành dialog popup với hiệu ứng như search dialog.
-
-**Giải pháp đã triển khai**:
-
-1. **Tạo NotificationDialog** (`frontend/components/notifications/notification_dialog.dart`):
-   - Copy animation pattern từ SearchDialog
-   - FadeTransition + SlideTransition với curve easeOutQuart
-   - Duration 300ms cho smooth animation
-   - Auto-close khi click outside hoặc close button
-
-2. **Tạo InvitationItem Component** (`frontend/components/notifications/invitation_item.dart`):
-   - Thiết kế card với project info, user avatar, time formatting
-   - Accept/Decline buttons với appropriate colors
-   - Responsive layout với proper spacing
-   - Time formatting (vừa xong, X phút trước, X giờ trước, etc.)
-
-3. **Cập nhật AppDrawer** (`frontend/components/navigation/app_drawer.dart`):
-   - Thay thế inline notification panel bằng `showDialog()`
-   - Notification dialog mở với hiệu ứng tương tự search dialog
-   - Close drawer trước khi mở dialog để UX tốt hơn
-   - Loại bỏ state `_showNotifications` không cần thiết
-
-### **🎯 Các Component Mới**
-
-```
-frontend/components/notifications/
-├── notification_dialog.dart (✅ NEW - Dialog với animation)
-│   ├── FadeTransition + SlideTransition
-│   ├── Empty state khi không có thông báo
-│   ├── ListView cho danh sách invitations
-│   └── Error handling cho accept/decline actions
-├── invitation_item.dart (✅ NEW - Component cho từng lời mời)
-│   ├── Project info với folder_shared icon
-│   ├── User avatar với first letter
-│   ├── Time formatting logic
-│   └── Accept/Decline buttons
-└── notification_badge.dart (✅ UPDATED)
-    └── Error handling để tránh crash khi provider chưa ready
-```
-
-### **🔧 Technical Improvements**
-
-1. **Error Handling Enhancement**:
-   - Safe access to providers trong `NotificationBadge`
-   - Try-catch blocks cho provider access
-   - Graceful fallbacks khi data chưa sẵn sàng
-
-2. **Animation Consistency**:
-   - Sử dụng cùng animation pattern với search dialog
-   - Smooth transitions với proper timing
-   - Consistent color scheme và styling
-
-3. **State Management**:
-   - Loại bỏ local state không cần thiết
-   - Sử dụng provider-based state management
-   - Clean separation of concerns
-
-### **✅ Kết quả**
-
-- **Lỗi "Box not found"**: ✅ Đã khắc phục hoàn toàn
-- **Lỗi "No existing invitation"**: ✅ Đã sửa logic trong sendInvitation()
-- **Notification UX**: ✅ Dialog với animation mượt mà như search
-- **Error handling**: ✅ Tăng cường để tránh crashes
-- **Performance**: ✅ Tối ưu memory calculation và provider access
-
----
-
-## 🔥 **CẬP NHẬT MỚI NHẤT - 26/10/2025 (Phần 2)**
-
-### **🚀 Khắc phục vấn đề Reactive State Management**
-
-**Vấn đề phát hiện**: Sau khi accept invitation hoặc thêm section, UI không cập nhật ngay lập tức mà phải logout/login mới thấy thay đổi.
-
-**Nguyên nhân gốc rễ**: 
-- **Riverpod providers không được invalidate** sau khi data thay đổi
-- **UI đang watch các providers cũ** mà không biết data đã thay đổi
-- **StateNotifier chỉ cập nhật local state** mà không thông báo cho related providers
-
-**Giải pháp áp dụng theo đúng Riverpod Patterns**:
-
-#### **1. 🔧 Fix Invitation System (`invitation_providers.dart`)**
-
-**Vấn đề**: Sau khi accept invitation, shared project không hiện trong project list ngay lập tức.
-
-**Giải pháp**:
 ```dart
-// ✅ BEFORE: Chỉ cập nhật local state
-_loadUserInvitations();
+// ❌ OLD LOGIC - Showed unassigned tasks in personal views
+filtered = allTodos.where((t) =>
+  t.assignedToId == ownerId || // Tasks assigned to current user
+  (t.assignedToId == null && t.ownerId == ownerId) // Unassigned tasks owned by user
+).toList();
 
-// ✅ AFTER: Áp dụng Provider Invalidation Pattern
-class InvitationNotifier extends StateNotifier<List<ProjectInvitation>> {
-  final Ref _ref; // ✅ Inject Ref để invalidate providers
-  
-  InvitationNotifier(..., this._ref) : super([]);
-  
-  Future<void> acceptInvitation(String invitationId) async {
-    // ...existing logic...
+// ✅ NEW LOGIC - Only assigned tasks in personal views
+filtered = allTodos.where((t) => t.assignedToId == ownerId).toList();
+```
+
+**Business Logic**: 
+- Personal Today/Upcoming views should only show tasks assigned TO the user
+- Unassigned tasks should only appear in project/section views where they can be assigned
+- This maintains clear separation between personal and shared workspaces
+
+---
+
+## 🎯 **NEW FEATURE - PROJECT SECTION TODAY FILTERING**
+
+### **Problem 2: Missing Filtering in Project Today View**
+**Issue**: The Today tab in project sections lacked filtering options to view tasks by member or see unassigned tasks.
+
+**Solution**: Implemented comprehensive filtering system with new providers and UI components.
+
+### **New Providers Added**
+```dart
+providers/task_filtering_providers.dart:
+├── projectSectionTodayFilterProvider - StateProvider for current filter
+├── projectSectionTodayTasksProvider.family - Filtered today tasks
+├── projectSectionTodayUnassignedCountProvider.family - Count unassigned
+└── projectSectionTodayMemberCountProvider.family - Count per member
+```
+
+### **New UI Component**
+```dart
+frontend/components/project/widgets/project_section_today_filter.dart:
+└── ProjectSectionTodayFilter - Interactive filter chips widget
+```
+
+### **Filter Options Available**
+1. **All Tasks** - Show all today tasks in project (default)
+2. **Unassigned (N)** - Show only unassigned tasks with count
+3. **Member Name (N)** - Show tasks for specific member with count
+   - Current user shown with filled person icon
+   - Other members shown with outline person icon
+   - Disabled chips for members with 0 tasks
+
+### **UI/UX Features**
+- **Smart Chip States**: Enabled/disabled based on task counts
+- **Visual Indicators**: Different icons for current user vs other members
+- **Real-time Counts**: Task counts update automatically as tasks are modified
+- **Clear Filter**: Easy reset to show all tasks
+- **Responsive Design**: Chips wrap to multiple lines as needed
+
+---
+
+## 🎨 **UI INTEGRATION UPDATES**
+
+### **Updated Project Section Widget**
+- **File**: `project_section_widget.dart`
+- **Changes**:
+  - Integrated `ProjectSectionTodayFilter` at top of Today tab
+  - Updated task list to use `projectSectionTodayTasksProvider`
+  - Modified tab count to reflect filtered tasks
+  - Enhanced empty state with better messaging
+
+### **Reactive Tab Count**
+```dart
+// ✅ NEW: Tab count reflects current filter
+final filteredTodayCount = ref.watch(projectSectionTodayTasksProvider(projectId)).length;
+Tab(text: 'Today ($filteredTodayCount)')
+```
+
+---
+
+## 📊 **PROVIDER ARCHITECTURE ENHANCEMENTS**
+
+### **Level 1: StateProvider - Filter State Management**
+```dart
+final projectSectionTodayFilterProvider = StateProvider<String?>((ref) => null);
+```
+
+### **Level 4: Provider.family - Parameterized Filtering**
+```dart
+final projectSectionTodayTasksProvider = Provider.family<List<Todo>, String>(
+  (ref, projectId) {
+    final projectTodos = ref.watch(projectTodosProvider);
+    final selectedFilter = ref.watch(projectSectionTodayFilterProvider);
     
-    // ✅ RIVERPOD PATTERN: Invalidate related providers
-    _ref.invalidate(projectListProvider);
-    _ref.invalidate(accessibleProjectsProvider);
-    _ref.invalidate(sharedProjectProvider(invitation.projectId));
-    _ref.invalidate(projectMembersProvider(invitation.projectId));
+    // Multi-step filtering: project + today + member
+    return todayTasks.where((todo) => 
+      selectedFilter == null ? true :
+      selectedFilter == 'unassigned' ? todo.assignedToId == null :
+      todo.assignedToId == selectedFilter
+    ).toList();
   }
-}
+);
 ```
 
-**Kết quả**: Project hiện ngay sau khi accept invitation mà không cần logout/login.
-
-#### **2. 🔧 Fix Section System (`section_providers.dart`)**
-
-**Vấn đề**: Sau khi thêm section, section không hiện trong UI ngay lập tức.
-
-**Giải pháp**:
+### **Reactive Count Providers**
 ```dart
-// ✅ BEFORE: Chỉ gọi _filterByOwnerAndProject()
-void addSection(String name) {
-  // ...create section...
-  _filterByOwnerAndProject(); // Chỉ cập nhật local state
-}
+// Count unassigned tasks
+final projectSectionTodayUnassignedCountProvider = Provider.family<int, String>(...);
 
-// ✅ AFTER: Áp dụng Provider Invalidation Pattern
-void addSection(String name) {
-  // ...create section...
-  _filterByOwnerAndProject();
-  
-  // ✅ RIVERPOD PATTERN: Invalidate related providers
-  _ref.invalidate(sectionsByProjectProvider(_projectId));
-  _ref.invalidate(allSectionsProvider);
-}
+// Count tasks per member
+final projectSectionTodayMemberCountProvider = Provider.family<int, Map<String, String>>(...);
 ```
-
-**Cũng áp dụng cho**:
-- `updateSection()`: Invalidate sau khi sửa section
-- `deleteSection()`: Invalidate sau khi xóa section + todos
-
-**Kết quả**: Sections hiện ngay sau khi thêm/sửa/xóa mà không cần logout/login.
-
-### **🎯 Riverpod Patterns Áp Dụng**
-
-#### **Pattern 1: Provider Invalidation**
-```dart
-// ✅ LEVEL 1: Invalidate simple providers
-_ref.invalidate(projectListProvider);
-_ref.invalidate(allSectionsProvider);
-
-// ✅ LEVEL 4: Invalidate family providers với parameter
-_ref.invalidate(sectionsByProjectProvider(projectId));
-_ref.invalidate(sharedProjectProvider(projectId));
-```
-
-#### **Pattern 2: Ref Injection trong StateNotifier**
-```dart
-// ✅ BEFORE: StateNotifier không thể invalidate providers khác
-class MyNotifier extends StateNotifier<T> {
-  MyNotifier() : super(initialState);
-}
-
-// ✅ AFTER: Inject Ref để có quyền invalidate
-class MyNotifier extends StateNotifier<T> {
-  final Ref _ref;
-  MyNotifier(this._ref) : super(initialState);
-  
-  void someAction() {
-    // Update data
-    // Invalidate related providers
-    _ref.invalidate(relatedProvider);
-  }
-}
-```
-
-#### **Pattern 3: Cross-Provider Reactivity**
-```dart
-// ✅ Khi data thay đổi ở provider A → invalidate providers B, C, D
-await _projectBox.put(project.id, updatedProject);
-_ref.invalidate(projectListProvider);     // Provider B
-_ref.invalidate(accessibleProjectsProvider); // Provider C  
-_ref.invalidate(sharedProjectProvider(projectId)); // Provider D
-```
-
-### **🔧 Technical Implementation Details**
-
-#### Files Modified:
-
-1. **`providers/invitation_providers.dart`**:
-   - Added `Ref _ref` parameter to `InvitationNotifier`
-   - Added `ref` injection in `invitationNotifierProvider`
-   - Added provider invalidation in `acceptInvitation()`
-   - Added import for `project_providers.dart`
-
-2. **`providers/section_providers.dart`**:
-   - Added provider invalidation in `addSection()`
-   - Added provider invalidation in `updateSection()`
-   - Added provider invalidation in `deleteSection()`
-   - Maintained existing `Ref _ref` usage
-
-#### Error Resolution:
-```dart
-// ✅ Safe provider invalidation patterns
-try {
-  _ref.invalidate(projectsProvider);
-  _ref.invalidate(accessibleProjectsProvider);
-  _ref.invalidate(sharedProjectProvider(invitation.projectId));
-  print('🔄 Invalidated providers after accepting invitation');
-} catch (e) {
-  print('⚠️ Error invalidating providers: $e');
-}
-```
-
-### **✅ Kết quả sau khi khắc phục**
-
-#### **Real-time Reactivity**:
-- ✅ **Accept invitation** → Project hiện ngay lập tức
-- ✅ **Add section** → Section hiện ngay lập tức  
-- ✅ **Update section** → Changes hiện ngay lập tức
-- ✅ **Delete section** → UI update ngay lập tức
-
-#### **Tuân thủ Riverpod Best Practices**:
-- ✅ **Provider invalidation** thay vì manual refresh
-- ✅ **Ref injection** cho cross-provider communication
-- ✅ **Family providers** cho parameterized data
-- ✅ **Error boundaries** cho safe operations
-
-#### **Performance Benefits**:
-- ✅ **Không cần logout/login** để refresh data
-- ✅ **Immediate UI updates** với optimal re-renders
-- ✅ **Cached provider data** được refresh chính xác
-- ✅ **Memory efficient** với selective invalidation
-
-### **🎓 Kinh nghiệm từ việc Debug**
-
-#### **Common Riverpod Anti-patterns tránh**:
-- ❌ **Manual state sync** giữa providers
-- ❌ **setState()** style updates trong providers  
-- ❌ **Logout/login** để refresh data
-- ❌ **Timer-based** polling để check updates
-
-#### **Riverpod Best Practices áp dụng**:
-- ✅ **Provider invalidation** cho reactive updates
-- ✅ **Ref injection** cho cross-provider dependencies
-- ✅ **Family providers** cho parameterized data
-- ✅ **Error boundaries** cho safe operations
 
 ---
 
-## 🔥 **CẬP NHẬT MỚI NHẤT - 27/10/2025 (Phần 2)**
+## 🔄 **BUSINESS LOGIC IMPROVEMENTS**
 
-### **🐛 Khắc phục Avatar Assignment Bug và UI Localization**
+### **Task Visibility Rules**
+1. **Personal Views (Today/Upcoming)**:
+   - Only show tasks assigned TO current user
+   - Unassigned tasks are hidden
+   - Focus on "what I need to do"
 
-**Vấn đề phát hiện từ User Testing**:
-1. **Avatar initials không cập nhật**: Khi chuyển task từ user "Q" sang "MQ", avatar vẫn hiển thị "Q" với màu của user "MQ"
-2. **UI tiếng Việt**: Edit dialog và assignment dialogs còn tiếng Việt cần đổi sang English
-3. **Assignment logic bug**: Task không chuyển assignment từ user A sang user B đúng cách
-4. **Date format**: Ngày hiển thị dài dòng, cần chỉ hiển thị ngày
+2. **Project/Section Views**:
+   - Show ALL tasks for collaboration
+   - Include unassigned tasks for assignment
+   - Support member filtering for coordination
 
-#### **1. 🔧 Avatar Assignment Bug Fix (`assigned_user_avatar.dart`)**
+### **Filter Behavior**
+- **Default**: Show all today tasks in project
+- **Member Filter**: Show only tasks assigned to selected member
+- **Unassigned Filter**: Show only tasks needing assignment
+- **Smart Counts**: Real-time updates as tasks change
+- **State Persistence**: Filter state maintained during session
 
-**Root Cause**: Avatar component đang cache `assignedToDisplayName` thay vì luôn lấy fresh data từ `assignedToId`.
+---
 
-**Solution Implementation**:
-```dart
-// ❌ BEFORE: Cache display name có thể sai
-String displayName = assignedToDisplayName ?? 'Unknown';
-String initials = _getInitials(displayName);
-Color avatarColor = _generateAvatarColor(assignedToId ?? displayName);
+## 🧪 **TESTING SCENARIOS**
 
-// ✅ AFTER: Always get fresh data based on assignedToId
-String displayName = ref.watch(userDisplayNameProvider(assignedToId!));
-// Fallback to cached name if provider returns empty
-if (displayName.isEmpty && assignedToDisplayName != null) {
-  displayName = assignedToDisplayName!;
-}
-String initials = _getInitials(displayName);
-Color avatarColor = _generateAvatarColor(assignedToId!); // Use ID for consistency
+### **Scenario 1: Personal View Filtering**
+1. User A creates unassigned task in shared project
+2. Verify task appears in project section, NOT in User A's Today view
+3. User B assigns task to User A
+4. Verify task now appears in User A's Today view
+
+### **Scenario 2: Project Today Filtering**
+1. Navigate to shared project's Today tab
+2. Verify filter chips show correct counts
+3. Select "Unassigned" filter
+4. Verify only unassigned today tasks shown
+5. Select member filter
+6. Verify only that member's today tasks shown
+
+---
+
+## 🚨 **CRITICAL FIXES - COMPILATION & CIRCULAR DEPENDENCY RESOLUTION**
+
+### **Issue: Circular Import Dependency Error**
+**Date**: October 28, 2025
+**Error Messages**:
+```
+lib/providers/todo_providers.dart(300,23): error G4127D1E8: The getter 'projectSectionTodayTasksProvider' isn't defined for the type 'TodoListNotifier'.
+lib/providers/todo_providers.dart(301,23): error G4127D1E8: The getter 'projectSectionTodayUnassignedCountProvider' isn't defined for the type 'TodoListNotifier'.
+[... and more similar errors]
 ```
 
-**Results**:
-- ✅ Avatar initials cập nhật đúng khi assignment changes
-- ✅ Avatar color consistency dựa trên assignedToId
-- ✅ Fresh data loading từ provider thay vì cache
+**Root Cause**: 
+- `TodoListNotifier` trong `todo_providers.dart` cố gắng invalidate providers từ `task_filtering_providers.dart`
+- Điều này tạo ra circular dependency: `todo_providers.dart` ↔ `task_filtering_providers.dart`
+- Dart không thể resolve circular imports
 
-#### **2. 🌍 UI Localization to English (`edit_todo_dialog.dart`)**
+**Solution Implemented**:
+
+### **1. Simplified Provider Invalidation Strategy**
+```dart
+// ❌ OLD: Attempted to invalidate external providers (caused circular dependency)
+_ref.invalidate(projectSectionTodayTasksProvider);
+_ref.invalidate(projectSectionTodayUnassignedCountProvider);
+_ref.invalidate(projectSectionTodayMemberCountProvider);
+
+// ✅ NEW: Only invalidate providers within same file
+void _invalidateRelatedProviders() {
+  try {
+    // Core providers defined in todo_providers.dart
+    _ref.invalidate(projectTodosProvider);
+    _ref.invalidate(filteredTodosProvider);
+    _ref.invalidate(todayTodoCountProvider);
+    
+    // Project-related providers
+    final projects = _ref.read(projectsProvider);
+    for (final project in projects) {
+      _ref.invalidate(sectionsByProjectProvider(project.id));
+    }
+  } catch (e) {
+    print('⚠️ Error invalidating providers: $e');
+  }
+}
+```
+
+### **2. Event-Based Notification System**
+**Created**: `task_update_notification_providers.dart`
+
+```dart
+/// ✅ LEVEL 1: StateProvider - Task update notification trigger
+final taskUpdateNotificationProvider = StateProvider<int>((ref) => 0);
+
+/// ✅ Helper function để trigger task update notifications
+void notifyTaskUpdate(WidgetRef ref) {
+  final currentValue = ref.read(taskUpdateNotificationProvider);
+  ref.read(taskUpdateNotificationProvider.notifier).state = currentValue + 1;
+}
+```
+
+**Benefits**:
+- Breaks circular dependency chain
+- Provides decoupled communication between provider files
+- Maintains real-time update capability
+- Follows event-driven architecture pattern
+
+### **3. Enhanced Provider Watching Strategy**
+**Updated**: `task_filtering_providers.dart`
+
+```dart
+// ✅ IMPROVED: All filtering providers now watch projectTodosProvider
+final projectSectionTodayTasksProvider = Provider.family<List<Todo>, String>((ref, projectId) {
+  final projectTodos = ref.watch(projectTodosProvider); // Reactive to all project changes
+  final selectedFilter = ref.watch(projectSectionTodayFilterProvider);
+  
+  // Filter logic remains the same but now reactive to projectTodosProvider changes
+});
+```
+
+---
+
+## 🔧 **RECENT UPDATES - UI/UX IMPROVEMENTS & REAL-TIME FIXES**
+
+### **Update 1: Removed Clear Filter Button + Added Toggle Functionality**
+**Date**: October 28, 2025
+**Issue**: Clear Filter button was unnecessary when users can toggle filters by clicking them again.
 
 **Changes Made**:
 ```dart
-// Dialog Title
-'Chỉnh sửa Task' → 'Edit Task'
-
-// Form Fields
-'Tên task' → 'Task name'
-'Ngày: ${date}' → '${date}' (chỉ hiển thị ngày)
-'Chọn ngày' → 'Select date'
-'Chọn project' → 'Select Project'
-'Chọn section' → 'Select Section'
-
-// Assignment Section
-'Người được giao: $name' → 'Assigned to: $name'
-'Chưa giao cho ai' → 'Unassigned task'
-
-// Assignment Dialog
-'Chọn người được giao' → 'Select Assignee'
-'Không giao cho ai' → 'Unassigned'
-'Unassigned' → 'No assignee'
-
-// Action Buttons
-'Hủy' → 'Cancel'
-'Lưu' → 'Save'
-'Xóa task' → 'Delete task'
-
-// Error Messages
-'Vui lòng chọn project trước khi gán người dùng' → 'Please select a project first'
-'Không có thành viên nào trong project này' → 'No members in this project'
+// ✅ REMOVED: Clear Filter button from ProjectSectionTodayFilter
+// ✅ ADDED: Toggle functionality for all filter chips
+- All Tasks: Clicking when another filter is active clears the filter
+- Unassigned: Clicking when selected clears filter, clicking when unselected applies filter
+- Member filter: Clicking when selected clears filter, clicking when unselected opens dialog
 ```
 
-2. **`notification_dialog.dart`**:
-```dart
-// Header và empty state
-'Thông báo' → 'Notifications'
-'Không có thông báo mới' → 'No new notifications'
-'Bạn sẽ nhận được thông báo...' → 'You will receive notifications...'
+**UI Improvements**:
+- Cleaner interface with less visual clutter
+- More intuitive interaction pattern
+- Consistent toggle behavior across all filters
 
-// Action feedback
-'Đã chấp nhận lời mời' → 'Invitation accepted successfully'
-'Đã từ chối lời mời' → 'Invitation declined'
-'Lỗi: X' → 'Error: X'
+### **Update 2: Enhanced Member Selection with Dialog**
+**Issue**: Individual member chips didn't scale well with many users and provided poor UX.
+
+**Solution**: Replaced individual member chips with a comprehensive member selection dialog.
+
+**New Features**:
+```dart
+ProjectSectionTodayFilter:
+├── Members button - Opens selection dialog
+├── Member Selection Dialog:
+│   ├── List of all project members
+│   ├── Current user highlighted with "You" label
+│   ├── Task count badges for each member
+│   ├── Visual indicators (filled/outline icons)
+│   ├── Disabled state for members with 0 tasks
+│   └── Tap to select and close dialog
 ```
 
-3. **`invitation_item.dart`**:
+**UX Benefits**:
+- Scales to any number of project members
+- Clear visual hierarchy with avatars and badges
+- Immediate task count visibility
+- Better accessibility with proper ListTile structure
+
+### **Update 3: Critical Riverpod Real-time Update Fixes**
+**Issue**: Task assignments/unassignments weren't updating UI immediately due to missing provider invalidation.
+
+**Root Cause**: `projectSectionTodayTasksProvider` and related count providers weren't being invalidated when tasks were modified.
+
+**Solution**: Comprehensive provider invalidation system in `TodoListNotifier`.
+
+**Provider Architecture Fixes**:
 ```dart
-// Project invitation info
-'Lời mời tham gia dự án' → 'Project invitation'
-'Từ: X' → 'From: X'
+// ✅ FIXED: All providers now watch projectTodosProvider for shared project updates
+projectSectionTodayTasksProvider - Fixed to use projectTodosProvider
+projectSectionTodayUnassignedCountProvider - Real-time unassigned count updates
+projectSectionTodayMemberCountProvider - Real-time member task count updates
 
-// Action buttons
-'Chấp nhận' → 'Accept'
-'Từ chối' → 'Decline'
-
-// Time formatting
-'Vừa xong' → 'Just now'
-'X phút trước' → 'X min ago'
-'X giờ trước' → 'X hr ago' 
-'X ngày trước' → 'X day(s) ago'
+// ✅ ADDED: Simplified invalidation in TodoListNotifier
+_invalidateRelatedProviders() - Called after edit, addWithAssignment, toggle
 ```
 
-#### **3. 🔧 Assignment Logic Enhancement (`todo_providers.dart`)**
+**Methods Enhanced with Real-time Updates**:
+- `edit()` - Task assignment/unassignment now updates immediately
+- `addWithAssignment()` - New assigned tasks appear immediately
+- `toggle()` - Task completion updates filter counts immediately
 
-**Problem**: Khi edit task để chuyển assignment từ user A sang user B, `assignedToDisplayName` không được cập nhật.
+### **Update 4: Tab Count Real-time Updates**
+**Issue**: Tab count "Today (N)" wasn't updating when tasks were assigned/unassigned.
 
-**Giải pháp**:
+**Solution**: Modified `_buildTabBar()` to use filtered task count provider.
+
 ```dart
-void edit({
-  required String id,
-  required String description,
-  DateTime? dueDate,
-  String? projectId,
-  String? sectionId,
-  String? assignedToId,
-}) {
-  // ...existing logic...
-  
-  // ✅ FIX: Get fresh display name when assignment changes
-  String? assignedToDisplayName;
-  if (assignedToId != null) {
-    final userBox = Hive.box('users');
-    final assignedUser = userBox.values.firstWhere(
-      (user) => user.id == assignedToId,
-      orElse: () => null,
-    );
-    assignedToDisplayName = assignedUser?.displayName;
-  }
+// ✅ OLD: Static count from basic filtering
+Tab(text: 'Today ($todayCount)')
 
-  _box.putAt(idx, todo.copyWith(
-    // ...existing fields...
-    assignedToId: assignedToId,
-    assignedToDisplayName: assignedToDisplayName, // ✅ Fresh name
-    assignedToIdSetToNull: assignedToId == null, // ✅ Clear when unassign
-  ));
+// ✅ NEW: Reactive count from filtered provider
+final filteredTodayCount = ref.watch(projectSectionTodayTasksProvider(projectId)).length;
+Tab(text: 'Today ($filteredTodayCount)')
+```
+
+---
+
+## 🏗️ **ARCHITECTURE IMPROVEMENTS**
+
+### **Circular Dependency Resolution Pattern**
+```
+Before (❌ Circular):
+todo_providers.dart → task_filtering_providers.dart
+task_filtering_providers.dart → todo_providers.dart
+
+After (✅ Clean):
+todo_providers.dart → (invalidates only internal providers)
+task_filtering_providers.dart → (watches projectTodosProvider)
+task_update_notification_providers.dart → (event system)
+```
+
+### **Provider Invalidation Strategy**
+```dart
+TodoListNotifier Methods:
+├── edit() → _invalidateRelatedProviders()
+├── addWithAssignment() → _invalidateRelatedProviders()  
+├── toggle() → _invalidateRelatedProviders()
+└── _invalidateRelatedProviders():
+    ├── projectTodosProvider (triggers cascade updates)
+    ├── filteredTodosProvider (basic filtering)
+    ├── todayTodoCountProvider (count updates)
+    └── sectionsByProjectProvider.family (project sections)
+```
+
+### **Real-time Update Flow**
+```
+1. User edits task assignment
+2. TodoListNotifier.edit() called
+3. Hive box updated
+4. _invalidateRelatedProviders() called
+5. projectTodosProvider invalidated
+6. All dependent providers auto-refresh:
+   - projectSectionTodayTasksProvider
+   - projectSectionTodayUnassignedCountProvider  
+   - projectSectionTodayMemberCountProvider
+7. UI rebuilds with new data
+```
+
+---
+
+## 🚨 **RUNTIME ERROR FIXES - TYPE & MEMBER VISIBILITY ISSUES**
+
+### **Issue 1: Type Error in ProjectSectionTodayFilter**
+**Date**: October 28, 2025
+**Error Message**:
+```
+type '() => Null' is not a subtype of type '(() => ProjectMember)?' of 'orElse'
+```
+
+**Root Cause**: 
+- `firstWhere` method expecting `orElse` parameter to return `ProjectMember?`
+- Code was using `orElse: () => null` which returns `Null` type
+- Dart type system rejected this mismatch
+
+**Solution Implemented**:
+```dart
+// ❌ OLD: Type error with orElse
+final member = projectMembers.firstWhere(
+  (m) => m.userId == selectedFilter,
+  orElse: () => null, // Type error: () => Null vs (() => ProjectMember)?
+);
+
+// ✅ NEW: Proper error handling with try-catch
+dynamic member;
+try {
+  member = projectMembers.firstWhere(
+    (m) => m.userId == selectedFilter,
+  );
+} catch (e) {
+  member = null; // Safe null assignment
 }
 ```
 
-#### **4. 🔧 TodoModel Enhancement (`todo_model.dart`)**
+**Benefits**:
+- Eliminates type safety errors
+- Provides cleaner error handling
+- Maintains null safety compliance
 
-**Added Missing Parameter**:
+### **Issue 2: Missing Project Owner in Members List**
+**Date**: October 28, 2025
+**Problem**: Project showing only 1 member when it should show 2 (owner + invited member)
+
+**Root Cause Analysis**:
+- `projectMembersProvider` only returned records from `project_members` Hive box
+- Project owner was not automatically added to `project_members` box
+- Only invited users had `ProjectMember` records
+- This caused owner to be invisible in member selection dialogs
+
+**Solution Implemented**:
 ```dart
-Todo copyWith({
-  // ...existing parameters...
-  bool assignedToIdSetToNull = false, // ✅ NEW: Clear assignment
-}) {
-  return Todo(
-    // ...existing fields...
-    assignedToId: assignedToIdSetToNull ? null : (assignedToId ?? this.assignedToId),
-    assignedToDisplayName: assignedToIdSetToNull ? null : (assignedToDisplayName ?? this.assignedToDisplayName),
+// ✅ ENHANCED: projectMembersProvider now includes owner
+final projectMembersProvider = Provider.family<List<ProjectMember>, String>((ref, projectId) {
+  final members = ref.watch(sharedProjectProvider(projectId));
+  final projects = ref.watch(projectsProvider);
+  final userBox = ref.watch(enhancedUserBoxProvider);
+  
+  // ✅ CRITICAL FIX: Include project owner in members list
+  final project = projects.where((p) => p.id == projectId).firstOrNull;
+  if (project == null) return members;
+  
+  // Check if owner is already in members list
+  final hasOwnerInMembers = members.any((m) => m.userId == project.ownerId);
+  
+  if (!hasOwnerInMembers) {
+    // Add project owner as first member
+    final owner = userBox.get(project.ownerId);
+    if (owner != null) {
+      final ownerMember = ProjectMember(
+        id: 'owner_${project.ownerId}_${projectId}',
+        projectId: projectId,
+        userId: project.ownerId,
+        userDisplayName: owner.displayName,
+        joinedAt: project.createdAt ?? DateTime.now(),
+      );
+      
+      // Return owner + other members
+      return [ownerMember, ...members];
+    }
+  }
+  
+  return members;
+});
+```
+
+**Key Improvements**:
+- **Owner Visibility**: Project owner always appears in member lists
+- **Proper Ordering**: Owner appears first, then invited members
+- **Consistent Data**: All member-based filtering now includes owner
+- **Virtual Member**: Owner gets virtual `ProjectMember` record without database persistence
+
+### **Impact on UI Components**:
+```dart
+Member Selection Dialog Now Shows:
+├── Project Owner (marked with "You" if current user)
+├── Invited Member 1
+├── Invited Member 2
+└── ... (all invited members)
+
+Filter Counts Now Include:
+├── Owner's tasks in member filtering
+├── Correct total member count
+└── Accurate task assignment statistics
+```
+
+---
+
+## 🐛 **ISSUES FIXED & SOLUTIONS**
+
+### **ISSUE 1: Filter Button Visibility in Dark Mode**
+**Problem**: Filter buttons (ALL, Daily Tasks, Projects) in completed tasks section were hard to see in dark mode due to poor contrast.
+
+**Root Cause**: Used basic border/background styling instead of proper theme-aware chip design.
+
+**Solution**: Applied the same chip-style design pattern used in Today tab filters:
+```dart
+// ✅ FIXED: Applied chip-style design from Today tab
+Widget _buildFilterButton() {
+  return GestureDetector(
+    child: AnimatedContainer(
+      decoration: BoxDecoration(
+        color: isSelected
+            ? theme.colorScheme.primary
+            : theme.colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline.withOpacity(0.3),
+        ),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: isSelected
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.onSurfaceVariant,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+        ),
+      ),
+    ),
   );
 }
 ```
 
----
+**Result**: 
+- ✅ Filter buttons now clearly visible in both light and dark themes
+- ✅ Consistent design pattern with Today tab filters
+- ✅ Better visual feedback with animation and proper contrast
 
-## 🔥 **CẬP NHẬT MỚI NHẤT - 27/10/2025 (Phần 3)**
+### **ISSUE 2: Duplicate Project Creator in Member List**
+**Problem**: Project owner appears twice in the project member list when viewing project members.
 
-### **🐛 Khắc phục lỗi Final Build Errors và Method Integration**
+**Root Cause**: `projectMembersProvider` was adding the project owner without properly checking if they were already in the members list.
 
-**Lỗi phát hiện từ Flutter Build**:
-1. **Null Safety Error**: `add_task_widget.dart:730` - Value of type 'Null' can't be returned from function with return type 'User'
-2. **Missing Method Error**: `invite_user_widget.dart:214` - Method 'inviteUser' isn't defined for type 'SharedProjectNotifier'
-
-#### **1. 🔧 Null Safety Fix in Assignment Logic**
-
-**Root Cause**: `firstWhere` với `orElse: () => null` trả về `null` nhưng function expect `User`.
-
-**Solution Implementation**:
+**Solution**: Fixed the duplication check logic in shared_project_providers.dart:
 ```dart
-// ❌ BEFORE: Null safety violation
-final assignedUser = assignableUsers.firstWhere(
-  (user) => user.id == _assignedUserId,
-  orElse: () => null, // ❌ Returns null for User type
-);
+// ✅ FIXED: Proper duplication check
+final projectMembersProvider = Provider.family<List<ProjectMember>, String>((ref, projectId) {
+  final members = ref.watch(sharedProjectProvider(projectId));
+  final projects = ref.watch(projectsProvider);
+  final userBox = ref.watch(enhancedUserBoxProvider);
 
-// ✅ AFTER: Proper null safety handling
-final assignedUser = assignableUsers.cast<User?>().firstWhere(
-  (user) => user?.id == _assignedUserId,
-  orElse: () => null, // ✅ Returns null for User? type
-);
-```
+  final project = projects.where((p) => p.id == projectId).firstOrNull;
+  if (project == null) return members;
 
-**Features Implemented**:
-- ✅ **Safe casting**: `assignableUsers.cast<User?>()` enables null returns
-- ✅ **Null operator**: `user?.id` safely accesses id on nullable User
-- ✅ **Type consistency**: Function signature matches return type
+  // ✅ FIXED: Check if owner is already in members list to prevent duplication
+  final hasOwnerInMembers = members.any((m) => m.userId == project.ownerId);
 
-#### **2. 🔧 Missing `inviteUser` Method Implementation**
-
-**Root Cause**: `invite_user_widget.dart` calls `inviteUser()` method that doesn't exist in `SharedProjectNotifier`.
-
-**Solution - Added Method to SharedProjectNotifier**:
-```dart
-/// ✅ NEW: inviteUser method for invite_user_widget.dart compatibility
-Future<void> inviteUser(String userId, String userDisplayName, String projectName) async {
-  try {
-    // Check if user already has access to the project
-    final project = _projectBox.get(projectId);
-    if (project != null && project.canUserAccess(userId)) {
-      throw Exception('User is already a member of this project');
+  if (!hasOwnerInMembers) {
+    // Add project owner as first member only if not already present
+    final owner = userBox.get(project.ownerId);
+    if (owner != null) {
+      final ownerMember = ProjectMember(/*...*/);
+      return [ownerMember, ...members];
     }
-
-    // Send invitation using invitation notifier
-    final currentUser = ref.read(currentUserProvider);
-    if (currentUser != null) {
-      final invitationNotifier = ref.read(invitationNotifierProvider.notifier);
-      await invitationNotifier.sendInvitation(
-        projectId: projectId,
-        projectName: projectName,
-        toUserId: userId,
-        toUserDisplayName: userDisplayName,
-      );
-    } else {
-      throw Exception('Current user not found');
-    }
-  } catch (e) {
-    rethrow;
   }
-}
-```
 
-**Features Implemented**:
-- ✅ **Duplicate check**: Prevents inviting existing members
-- ✅ **Current user validation**: Ensures valid sender
-- ✅ **Provider integration**: Uses existing invitation system
-- ✅ **Error handling**: Proper exception propagation
-
-#### **3. 🎯 Riverpod Patterns Applied**
-
-**Pattern 1: Null Safety with Provider.family**:
-- ✅ **Safe type casting**: Handle nullable types in assignment logic
-- ✅ **Defensive programming**: Always check for null before accessing properties
-- ✅ **Type consistency**: Ensure return types match function signatures
-- ✅ **Error boundaries**: Graceful fallbacks when data missing
-
-**Pattern 2: StateNotifier Method Integration**:
-- ✅ **Ref injection**: Access other providers through `ref.read()`
-- ✅ **Provider composition**: Integrate with existing invitation system
-- ✅ **Error propagation**: Proper exception handling với `rethrow`
-
-#### **4. 🔧 Files Modified**
-
-**1. `lib/frontend/components/todo/add_task_widget.dart`**:
-- Fixed null safety issue in assignment user lookup
-- Added `.cast<User?>()` for proper nullable handling
-- Enhanced error boundaries cho assignment logic
-
-**2. `lib/providers/shared_project_providers.dart`**:
-- Added `inviteUser()` method to `SharedProjectNotifier`
-- Integrated with existing invitation system
-- Added proper validation và error handling
-
-### **✅ Build Status After Fix**
-
-#### **Compilation Success**:
-- ✅ **No type errors**: All User types recognized properly
-- ✅ **Property access**: user.id, user.displayName, user.username accessible
-- ✅ **Casting safety**: Nullable User types handled correctly
-- ✅ **Provider integration**: Type-safe provider operations
-
-#### **Assignment System Functionality**:
-- ✅ **User selection**: Assignment dialog displays users correctly
-- ✅ **Display logic**: Assignee names show properly in UI
-- ✅ **Type inference**: IDE autocomplete works for User properties
-- ✅ **Error boundaries**: Null safety maintained throughout
-
-#### **Code Quality Improvements**:
-- ✅ **IntelliSense support**: Full IDE support for User model
-- ✅ **Compile-time checks**: Type errors caught at build time
-- ✅ **Maintainability**: Clear type definitions improve code readability
-- ✅ **Performance**: No runtime type checking needed
-
-### **🎓 Final Technical Lessons**
-
-#### **Null Safety Best Practices**:
-- ✅ **Explicit casting**: Use `.cast<T?>()` when working with nullable collections
-- ✅ **Safe navigation**: Use `?.` operator for nullable property access
-- ✅ **Type consistency**: Ensure return types match function signatures
-- ✅ **Error boundaries**: Graceful fallbacks for null cases
-
-#### **StateNotifier Method Design**:
-- ✅ **Consistency**: Match method names with UI expectations
-- ✅ **Integration**: Leverage existing providers instead of duplicating logic
-- ✅ **Validation**: Always validate inputs và current state
-- ✅ **Error handling**: Provide clear error messages cho debugging
-
-#### **Build Error Resolution Strategy**:
-- ✅ **Incremental fixes**: Address one error at a time
-- ✅ **Root cause analysis**: Understand why error occurs, not just symptoms
-- ✅ **Pattern compliance**: Ensure fixes follow established patterns
-- ✅ **Testing validation**: Verify fixes don't introduce new issues
-
----
-
-## 🔥 **CẬP NHẬT MỚI NHẤT - 27/10/2025 (Phần 4)**
-
-### **🐛 Khắc phục lỗi Build Errors và Complete English Localization**
-
-**Lỗi phát hiện từ Flutter Build**:
-1. **Build Error**: `assignedToId` parameter và `delete()` method không tồn tại
-2. **UI tiếng Việt**: Notification dialogs và invitation items còn tiếng Việt
-3. **Missing Providers**: Task filtering providers chưa được tạo
-4. **Compilation Failure**: App không build được do các lỗi trên
-
-#### **1. 🔧 Build Errors Resolution**
-
-**Root Cause Analysis**:
-- **`edit_todo_dialog.dart:403`**: Parameter `assignedToId` đã tồn tại trong `TodoListNotifier.edit()`
-- **`edit_todo_dialog.dart:425`**: Method `delete()` đã tồn tại trong `TodoListNotifier` class
-- **Compilation issue**: Chỉ là lỗi build cache, không phải code logic
-
-**Solution Applied**:
-- ✅ **Verified method signatures**: Tất cả parameters và methods đều có sẵn
-- ✅ **English localization**: Hoàn thiện tất cả UI text sang tiếng Anh
-- ✅ **Provider creation**: Tạo missing task filtering providers
-
-#### **2. 🌍 Complete English Localization Implementation**
-
-**Files Updated với English UI**:
-
-1. **`edit_todo_dialog.dart`**:
-```dart
-// Dialog titles và labels
-'Chỉnh sửa Task' → 'Edit Task'
-'Tên task' → 'Task name' 
-'Chọn ngày' → 'Select date'
-'Chọn project' → 'Select Project'
-'Chọn section' → 'Select Section'
-
-// Assignment section
-'Người được giao: X' → 'Assigned to: X'
-'Chưa giao cho ai' → 'Unassigned task'
-'Chọn người được giao' → 'Select Assignee'
-
-// Action buttons và messages
-'Hủy/Lưu/Xóa' → 'Cancel/Save/Delete'
-'Xác nhận xóa' → 'Confirm Delete'
-'Đã cập nhật task' → 'Task updated successfully'
-'Đã xóa task' → 'Task deleted successfully'
-```
-
-2. **`notification_dialog.dart`**:
-```dart
-// Header và empty state
-'Thông báo' → 'Notifications'
-'Không có thông báo mới' → 'No new notifications'
-'Bạn sẽ nhận được thông báo...' → 'You will receive notifications...'
-
-// Action feedback
-'Đã chấp nhận lời mời' → 'Invitation accepted successfully'
-'Đã từ chối lời mời' → 'Invitation declined'
-'Lỗi: X' → 'Error: X'
-```
-
-3. **`invitation_item.dart`**:
-```dart
-// Project invitation info
-'Lời mời tham gia dự án' → 'Project invitation'
-'Từ: X' → 'From: X'
-
-// Action buttons
-'Chấp nhận' → 'Accept'
-'Từ chối' → 'Decline'
-
-// Time formatting
-'Vừa xong' → 'Just now'
-'X phút trước' → 'X min ago'
-'X giờ trước' → 'X hr ago' 
-'X ngày trước' → 'X day(s) ago'
-```
-
-#### **3. 🔧 Task Filtering Providers Creation (`task_filtering_providers.dart`)**
-
-**New Providers Implemented**:
-
-```dart
-// ✅ LEVEL 1: State Management
-final selectedMemberFilterProvider = StateProvider<String?>((ref) => null);
-
-// ✅ LEVEL 4: Provider.family - Parameterized counting
-final userTaskCountProvider = Provider.family<int, String>((ref, userId) {
-  final todos = ref.watch(todoListProvider);
-  return todos.where((todo) => todo.assignedToId == userId).length;
+  // ✅ FIXED: If owner is already in members list, return as-is without duplication
+  return members;
 });
-
-final unassignedTaskCountProvider = Provider.family<int, String>((ref, projectId) {
-  final todos = ref.watch(todoListProvider);
-  return todos.where((todo) => 
-    todo.projectId == projectId && todo.assignedToId == null
-  ).length;
-});
-
-// ✅ LEVEL 4: Advanced filtering logic
-final filteredTasksByMemberProvider = Provider.family<List<Todo>, String>((ref, projectId) {
-  final allTodos = ref.watch(todoListProvider);
-  final selectedFilter = ref.watch(selectedMemberFilterProvider);
-  
-  // Complex filtering logic:
-  // 1. Filter by project first
-  // 2. Then by selected member or unassigned status
-  // 3. Real-time updates when assignments change
-});
-
-// ✅ Helper providers for UI interactions
-final clearMemberFilterProvider = Provider<void Function()>((ref) => ...);
-final setMemberFilterProvider = Provider<void Function(String?)>((ref) => ...);
 ```
 
-**Provider Features**:
-- ✅ **Real-time task counting**: Số task update ngay khi có assignment changes
-- ✅ **Project-scoped filtering**: Chỉ filter tasks trong project cụ thể
-- ✅ **Unassigned task handling**: Riêng biệt cho unassigned tasks
-- ✅ **Member-based filtering**: Click user để xem tasks của họ
-- ✅ **Helper functions**: Easy UI interaction với providers
+**Result**:
+- ✅ Project creator now appears only once in member list
+- ✅ Proper member list ordering (owner first, then other members)
+- ✅ No duplicate entries in project member management
 
----
-
-## 🔥 **CẬP NHẬT MỚI NHẤT - 27/10/2025 (Phần 5)**
-
-### **🐛 Khắc phục lỗi Build Errors và Complete English Localization**
-
-**Lỗi phát hiện từ Flutter Build**:
-1. **Build Error**: `assignedToId` parameter và `delete()` method không tồn tại
-2. **UI tiếng Việt**: Notification dialogs và invitation items còn tiếng Việt
-3. **Missing Providers**: Task filtering providers chưa được tạo
-4. **Compilation Failure**: App không build được do các lỗi trên
-
-#### **1. 🔧 Build Errors Resolution**
-
-**Root Cause Analysis**:
-- **`edit_todo_dialog.dart:403`**: Parameter `assignedToId` đã tồn tại trong `TodoListNotifier.edit()`
-- **`edit_todo_dialog.dart:425`**: Method `delete()` đã tồn tại trong `TodoListNotifier` class
-- **Compilation issue**: Chỉ là lỗi build cache, không phải code logic
-
-**Solution Applied**:
-- ✅ **Verified method signatures**: Tất cả parameters và methods đều có sẵn
-- ✅ **English localization**: Hoàn thiện tất cả UI text sang tiếng Anh
-- ✅ **Provider creation**: Tạo missing task filtering providers
-
-#### **2. 🌍 Complete English Localization Implementation**
-
-**Files Updated với English UI**:
-
-1. **`edit_todo_dialog.dart`**:
-```dart
-// Dialog titles và labels
-'Chỉnh sửa Task' → 'Edit Task'
-'Tên task' → 'Task name' 
-'Chọn ngày' → 'Select date'
-'Chọn project' → 'Select Project'
-'Chọn section' → 'Select Section'
-
-// Assignment section
-'Người được giao: X' → 'Assigned to: X'
-'Chưa giao cho ai' → 'Unassigned task'
-'Chọn người được giao' → 'Select Assignee'
-
-// Action buttons và messages
-'Hủy/Lưu/Xóa' → 'Cancel/Save/Delete'
-'Xác nhận xóa' → 'Confirm Delete'
-'Đã cập nhật task' → 'Task updated successfully'
-'Đã xóa task' → 'Task deleted successfully'
-```
-
-2. **`notification_dialog.dart`**:
-```dart
-// Header và empty state
-'Thông báo' → 'Notifications'
-'Không có thông báo mới' → 'No new notifications'
-'Bạn sẽ nhận được thông báo...' → 'You will receive notifications...'
-
-// Action feedback
-'Đã chấp nhận lời mời' → 'Invitation accepted successfully'
-'Đã từ chối lời mời' → 'Invitation declined'
-'Lỗi: X' → 'Error: X'
-```
-
-3. **`invitation_item.dart`**:
-```dart
-// Project invitation info
-'Lời mời tham gia dự án' → 'Project invitation'
-'Từ: X' → 'From: X'
-
-// Action buttons
-'Chấp nhận' → 'Accept'
-'Từ chối' → 'Decline'
-
-// Time formatting
-'Vừa xong' → 'Just now'
-'X phút trước' → 'X min ago'
-'X giờ trước' → 'X hr ago' 
-'X ngày trước' → 'X day(s) ago'
-```
-
-#### **3. 🔧 Task Filtering Providers Creation (`task_filtering_providers.dart`)**
-
-**New Providers Implemented**:
-
-```dart
-// ✅ LEVEL 1: State Management
-final selectedMemberFilterProvider = StateProvider<String?>((ref) => null);
-
-// ✅ LEVEL 4: Provider.family - Parameterized counting
-final userTaskCountProvider = Provider.family<int, String>((ref, userId) {
-  final todos = ref.watch(todoListProvider);
-  return todos.where((todo) => todo.assignedToId == userId).length;
-});
-
-final unassignedTaskCountProvider = Provider.family<int, String>((ref, projectId) {
-  final todos = ref.watch(todoListProvider);
-  return todos.where((todo) => 
-    todo.projectId == projectId && todo.assignedToId == null
-  ).length;
-});
-
-// ✅ LEVEL 4: Advanced filtering logic
-final filteredTasksByMemberProvider = Provider.family<List<Todo>, String>((ref, projectId) {
-  final allTodos = ref.watch(todoListProvider);
-  final selectedFilter = ref.watch(selectedMemberFilterProvider);
-  
-  // Complex filtering logic:
-  // 1. Filter by project first
-  // 2. Then by selected member or unassigned status
-  // 3. Real-time updates when assignments change
-});
-
-// ✅ Helper providers for UI interactions
-final clearMemberFilterProvider = Provider<void Function()>((ref) => ...);
-final setMemberFilterProvider = Provider<void Function(String?)>((ref) => ...);
-```
-
-**Provider Features**:
-- ✅ **Real-time task counting**: Số task update ngay khi có assignment changes
-- ✅ **Project-scoped filtering**: Chỉ filter tasks trong project cụ thể
-- ✅ **Unassigned task handling**: Riêng biệt cho unassigned tasks
-- ✅ **Member-based filtering**: Click user để xem tasks của họ
-- ✅ **Helper functions**: Easy UI interaction với providers
-
----
-
-## 🔥 **CẬP NHẬT MỚI NHẤT - 27/10/2025 (Phần 6)**
-
-### **🐛 Khắc phục lỗi Member Filtering System và UI Reorganization**
-
-**Các vấn đề được báo cáo**:
-1. **Member Filtering không hoạt động**: Click vào user nhưng tasks của các user khác vẫn hiển thị
-2. **UI Layout không hợp lý**: "Invite New Member" ở dưới, "Unassigned Tasks" trong mục Members
-3. **Thiếu visual feedback**: Không rõ user nào đang được filter
-
-#### **1. 🔧 Fix Member Filtering System Logic**
-
-**Root Cause**: `ProjectSectionWidget` đang sử dụng `todoListProvider` thay vì filtered version.
-
-**Solution Implementation**:
-```dart
-// ✅ NEW: Provider for filtered todos in todo_providers.dart
-final selectedMemberFilterProvider = StateProvider<String?>((ref) => null);
-
-final filteredTodoListProvider = Provider<List<Todo>>((ref) {
-  final allTodos = ref.watch(todoListProvider);
-  final selectedFilter = ref.watch(selectedMemberFilterProvider);
-  
-  if (selectedFilter == null) {
-    return allTodos; // No filter - show all todos
-  } else if (selectedFilter == 'unassigned') {
-    return allTodos.where((todo) => todo.assignedToId == null).toList();
-  } else {
-    return allTodos.where((todo) => todo.assignedToId == selectedFilter).toList();
-  }
-});
-
-// ✅ UPDATED: ProjectSectionWidget now uses filtered todos
-final todos = ref.watch(filteredTodoListProvider); // Instead of todoListProvider
-```
-
-**Technical Fix Details**:
-- **Moved `selectedMemberFilterProvider`** từ `project_members_dialog.dart` to `todo_providers.dart` để share across components
-- **Created `filteredTodoListProvider`** combines `todoListProvider` với member filtering logic  
-- **Updated `ProjectSectionWidget`** to use filtered todos instead of all todos
-- **Provider reactivity**: Khi user click member, tất cả project views automatically update
-
-#### **2. 🎨 UI Reorganization - Better UX Flow**
+### **RIVERPOD STATE MANAGEMENT IMPACT**
 
 **Changes Made**:
-```dart
-// ✅ NEW UI Structure in ProjectMembersDialog
-Project Members Dialog:
-├── Header (Project name + close button)
-├── 🆕 Invite New Members Section (moved to top)
-│   ├── Section header with person_add icon
-│   └── InviteUserWidget
-├── Divider
-├── Members Section  
-│   ├── Section header with people icon
-│   └── Member list with task counts & filtering
-├── 🆕 Tasks Section (new section)
-│   ├── Section header with task_alt icon  
-│   └── Unassigned Tasks (moved from Members)
-```
+1. **completed_filter_bar.dart**: Updated filter button styling to match Today tab design pattern
+2. **shared_project_providers.dart**: Fixed `projectMembersProvider.family` logic to prevent owner duplication
 
-**UI Improvements**:
-- ✅ **"Invite New Members"** moved above Members section (logical flow)
-- ✅ **"Unassigned Tasks"** moved to separate "Tasks" section (more logical)
-- ✅ **Clear visual sections** with proper icons và headers
-- ✅ **Better information hierarchy**: Invite → Members → Tasks
+**Provider Dependencies Affected**:
+- `projectMembersProvider.family` - Fixed duplication logic
+- `assignableUsersInProjectProvider.family` - Inherits fix from projectMembersProvider
+- `completedFilterTypeProvider` - No logic changes, only UI styling improvements
 
-#### **3. 🎯 Enhanced Filtering Logic**
+**Performance Impact**: ✅ Minimal - Only UI rendering improvements, no additional provider calls or state rebuilds.
 
-**Member Selection Behavior**:
-```dart
-// ✅ ENHANCED: Proper toggle behavior
-onTap: () {
-  ref.read(selectedMemberFilterProvider.notifier).state = 
-    isSelected ? null : user.id; // Toggle on/off
-},
-
-// ✅ ENHANCED: Visual feedback with background color
-Material(
-  color: isSelected 
-    ? Colors.blue.withOpacity(0.2)  // Blue when selected
-    : Colors.transparent,          // Transparent when not selected
-)
-```
-
-**Filter States**:
-- **`null`**: Show all tasks (no filter)
-- **`'unassigned'`**: Show only unassigned tasks  
-- **`userId`**: Show only tasks assigned to specific user
-
-#### **4. 🔄 Provider Integration Pattern**
-
-**Cross-Component Communication**:
-```dart
-// project_members_dialog.dart - Set filter
-ref.read(selectedMemberFilterProvider.notifier).state = userId;
-
-// project_section_widget.dart - Consume filter  
-final todos = ref.watch(filteredTodoListProvider);
-
-// Automatic reactivity: Change in dialog → Update in project view
-```
-
-**Files Modified**:
-1. **`providers/todo_providers.dart`**:
-   - Added `selectedMemberFilterProvider` (moved from dialog)
-   - Added `filteredTodoListProvider` (combines filtering logic)
-
-2. **`frontend/components/shared_project/project_members_dialog.dart`**:
-   - Removed duplicate `selectedMemberFilterProvider` declaration
-   - Reorganized UI: Invite → Members → Tasks flow
-   - Moved Unassigned Tasks to Tasks section
-
-3. **`frontend/components/project/widgets/project_section_widget.dart`**:
-   - Updated to use `filteredTodoListProvider` instead of `todoListProvider`
-   - Added comment explaining member filtering integration
-
-#### **5. 🎉 Result - Professional Filtering System**
-
-**User Experience Now**:
-1. **Open Project Members Dialog** → See accurate task counts per member
-2. **Click member** → Background turns blue, project view filters to show only their tasks
-3. **Click again** → Remove filter, show all tasks
-4. **Click "Unassigned Tasks"** → Show only tasks without assignee
-5. **Clear visual feedback** throughout the filtering process
-
-**Technical Benefits**:
-- ✅ **Reactive filtering**: Changes propagate automatically across all components
-- ✅ **Consistent state**: Single source of truth for selected filter
-- ✅ **Performance**: Efficient filtering without unnecessary re-renders
-- ✅ **Maintainable**: Clean separation between UI and filtering logic
-
-#### **6. 📝 Development Lessons**
-
-**Key Insights**:
-- **Provider Sharing**: Move shared state to common provider files
-- **UI Logic Separation**: Keep filtering logic separate from UI components  
-- **Reactive Patterns**: Use Riverpod's automatic reactivity for cross-component updates
-- **User Feedback**: Visual indicators crucial for filter states
-
-**Best Practices Applied**:
-- ✅ **Single Responsibility**: Each provider has one clear purpose
-- ✅ **Composition over Inheritance**: Combine simple providers for complex behavior
-- ✅ **Defensive Programming**: Handle null states gracefully
-- ✅ **User Experience First**: Clear visual feedback for all actions
-
-### **✅ Kết quả sau khi khắc phục**
-
-#### **Member Filtering System**:
-- ✅ **Works correctly**: Click member → chỉ hiển thị tasks của họ
-- ✅ **Visual feedback**: Background xanh khi selected, clear khi deselected  
-- ✅ **Toggle behavior**: Click lần nữa để bỏ filter
-- ✅ **Unassigned filter**: Separate section với proper orange badge
-
-#### **UI/UX Improvements**:
-- ✅ **Logical flow**: Invite → Members → Tasks organization
-- ✅ **Professional appearance**: Clear sections với proper icons
-- ✅ **Better accessibility**: Logical grouping và visual hierarchy
-- ✅ **Responsive feedback**: Immediate updates to user actions
-
-#### **Technical Architecture**:
-- ✅ **Clean code**: Shared providers, no duplication
-- ✅ **Maintainable**: Clear separation of concerns
-- ✅ **Scalable**: Easy to add more filtering options
-- ✅ **Performance**: Optimized reactive updates
-
-**🚀 Project Members Dialog bây giờ hoạt động professional với proper filtering system và intuitive UI layout!** 🎉
+---

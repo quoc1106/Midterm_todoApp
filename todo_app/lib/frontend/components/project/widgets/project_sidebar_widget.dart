@@ -159,6 +159,8 @@ class _ProjectSidebarWidgetState extends ConsumerState<ProjectSidebarWidget> {
           ),
           title: Text(
             project.name,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
             style: TextStyle(
               fontSize: 14,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,

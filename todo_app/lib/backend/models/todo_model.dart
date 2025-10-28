@@ -20,6 +20,7 @@ class Todo {
     this.ownerId,
     this.assignedToId, // ✅ NEW: Người được assign task
     this.assignedToDisplayName, // ✅ NEW: Cache tên người được assign
+    this.completedByUserId, // ✅ NEW: Track who completed the task
   });
 
   @HiveField(0)
@@ -40,6 +41,8 @@ class Todo {
   final String? assignedToId; // ✅ NEW: Người thực hiện task
   @HiveField(8)
   final String? assignedToDisplayName; // ✅ NEW: Cache tên người được assign
+  @HiveField(9)
+  final String? completedByUserId; // ✅ NEW: Track who completed the task
 
   /// ✅ BUSINESS LOGIC METHODS - Pure backend logic
 
@@ -132,10 +135,12 @@ class Todo {
     String? ownerId,
     String? assignedToId, // ✅ NEW: Người được assign task
     String? assignedToDisplayName, // ✅ NEW: Tên người được assign
+    String? completedByUserId, // ✅ NEW: Who completed the task
     bool projectIdSetToNull = false,
     bool sectionIdSetToNull = false,
     bool ownerIdSetToNull = false,
     bool assignedToIdSetToNull = false, // ✅ NEW: Clear assignment
+    bool completedByUserIdSetToNull = false, // ✅ NEW: Clear completion tracking
   }) {
     return Todo(
       id: id ?? this.id,
@@ -147,6 +152,7 @@ class Todo {
       ownerId: ownerIdSetToNull ? null : (ownerId ?? this.ownerId),
       assignedToId: assignedToIdSetToNull ? null : (assignedToId ?? this.assignedToId), // ✅ Clear when needed
       assignedToDisplayName: assignedToIdSetToNull ? null : (assignedToDisplayName ?? this.assignedToDisplayName), // ✅ Clear name too
+      completedByUserId: completedByUserIdSetToNull ? null : (completedByUserId ?? this.completedByUserId), // ✅ Track completion
     );
   }
 

@@ -186,6 +186,8 @@ class _ProjectSectionWidgetState extends ConsumerState<ProjectSectionWidget>
                     color: Theme.of(context).colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.bold,
                   ),
+                  overflow: TextOverflow.ellipsis, // ✅ NEW: Cắt ngắn tên project dài
+                  maxLines: 1, // ✅ NEW: Giới hạn chỉ 1 dòng
                 ),
               ),
               // ✅ NEW: Shared Project Indicator - biểu tượng nhóm bên cạnh tên project

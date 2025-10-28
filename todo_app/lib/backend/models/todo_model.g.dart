@@ -26,13 +26,14 @@ class TodoAdapter extends TypeAdapter<Todo> {
       ownerId: fields[6] as String?,
       assignedToId: fields[7] as String?,
       assignedToDisplayName: fields[8] as String?,
+      completedByUserId: fields[9] as String?, // ✅ ADDED: Missing field for completion tracking
     );
   }
 
   @override
   void write(BinaryWriter writer, Todo obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10) // ✅ UPDATED: Changed from 9 to 10 fields
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -50,7 +51,9 @@ class TodoAdapter extends TypeAdapter<Todo> {
       ..writeByte(7)
       ..write(obj.assignedToId)
       ..writeByte(8)
-      ..write(obj.assignedToDisplayName);
+      ..write(obj.assignedToDisplayName)
+      ..writeByte(9)
+      ..write(obj.completedByUserId); // ✅ ADDED: Write the completion tracking field
   }
 
   @override

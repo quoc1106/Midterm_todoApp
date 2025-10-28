@@ -167,11 +167,11 @@ final projectMembersProvider = Provider.family<List<ProjectMember>, String>((ref
   final project = projects.where((p) => p.id == projectId).firstOrNull;
   if (project == null) return members;
 
-  // Check if owner is already in members list
+  // ✅ FIXED: Check if owner is already in members list to prevent duplication
   final hasOwnerInMembers = members.any((m) => m.userId == project.ownerId);
 
   if (!hasOwnerInMembers) {
-    // Add project owner as first member
+    // Add project owner as first member only if not already present
     final owner = userBox.get(project.ownerId);
     if (owner != null) {
       final ownerMember = ProjectMember(
@@ -187,6 +187,7 @@ final projectMembersProvider = Provider.family<List<ProjectMember>, String>((ref
     }
   }
 
+  // ✅ FIXED: If owner is already in members list, return as-is without duplication
   return members;
 });
 

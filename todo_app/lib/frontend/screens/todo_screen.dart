@@ -19,9 +19,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Backend imports
-import '../../providers/todo_providers.dart' show GroupedTodos, SidebarItem, upcomingGroupedTodosProvider, filteredTodosProvider, appBarTitleProvider, upcomingSelectedDateProvider, selectedProjectIdProvider, overdueTodosProvider, todayOnlyTodosProvider, overdueTodoCountProvider, overdueCollapsedProvider, enhancedUpcomingGroupedTodosProvider, upcomingOverdueTodosProvider, upcomingOverdueCollapsedProvider, upcomingGroupCollapsedProvider, addTaskGroupDateProvider, shouldShowAddTaskProvider, newTodoDateProvider, emptyDateMessageProvider, sidebarItemProvider;
+import '../../providers/todo_providers.dart' show GroupedTodos, SidebarItem, upcomingGroupedTodosProvider, filteredTodosProvider, appBarTitleProvider, upcomingSelectedDateProvider, selectedProjectIdProvider, overdueTodosProvider, todayOnlyTodosProvider, overdueTodoCountProvider, overdueCollapsedProvider, enhancedUpcomingGroupedTodosProvider, upcomingOverdueTodosProvider, upcomingOverdueCollapsedProvider, upcomingGroupCollapsedProvider, addTaskGroupDateProvider, shouldShowAddTaskProvider, newTodoDateProvider, emptyDateMessageProvider, sidebarItemProvider, CompletedFilterType, completedFilterTypeProvider, completedSelectedProjectIdProvider, filteredCompletedTodosProvider;
 import '../../providers/todo_providers.dart' as TodoProviders show DateUtils;
 import '../../backend/models/todo_model.dart';
+import '../../backend/models/project_model.dart'; // ✅ ADDED: Import ProjectModel
+import '../../providers/task_filtering_providers.dart'; // ✅ NEW: Import for shared project completed tasks
+import '../../providers/project_providers.dart' show accessibleProjectsProvider; // ✅ NEW: For completed filter
 
 // Frontend component imports
 import '../components/todo/index.dart';
@@ -32,6 +35,7 @@ import '../components/navigation/date_selector_widget.dart';
 import '../components/app/performance_floating_indicator.dart';
 import '../components/todo/todo_item.dart' as LegacyTodoItem;
 import '../components/todo/todo_item.dart';
+import '../components/completed/completed_filter_bar.dart'; // ✅ NEW: Import completed filter bar
 
 /// ⭐ MAIN TODO SCREEN: Frontend/Backend Integration Demo
 ///
@@ -470,28 +474,122 @@ class TodoScreen extends ConsumerWidget {
     );
   }
 
-  /// ⭐ COMPLETED VIEW: Show completed tasks without strikethrough
+  /// ⭐ COMPLETED VIEW: Show completed tasks with advanced filtering
   Widget _buildCompletedView(
     BuildContext context,
     WidgetRef ref,
     List<Todo> todos,
   ) {
-    final completedTodos = todos.where((todo) => todo.completed).toList();
+    final filteredCompletedTodos = ref.watch(filteredCompletedTodosProvider);
+    final filterType = ref.watch(completedFilterTypeProvider);
+    final selectedProjectId = ref.watch(completedSelectedProjectIdProvider);
 
-    if (completedTodos.isEmpty) {
-      return const Center(
-        child: Text(
-          'Chưa có công việc nào hoàn thành!',
-          style: TextStyle(fontSize: 16),
+    return Column(
+      children: [
+        // ✅ NEW: Filter bar at the top
+        const CompletedFilterBar(),
+
+        // ✅ NEW: Filter result summary
+        if (filterType != CompletedFilterType.all) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Theme.of(context).primaryColor.withOpacity(0.1),
+            child: Text(
+              _getFilterSummaryText(filterType, selectedProjectId, ref),
+              style: TextStyle(
+                color: Theme.of(context).primaryColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+
+        // ✅ Task list
+        Expanded(
+          child: filteredCompletedTodos.isEmpty
+              ? _buildCompletedEmptyState(context, filterType)
+              : ListView.builder(
+                  itemCount: filteredCompletedTodos.length,
+                  itemBuilder: (context, index) {
+                    return TodoItem(todo: filteredCompletedTodos[index]);
+                  },
+                ),
         ),
-      );
+      ],
+    );
+  }
+
+  /// Helper method to get filter summary text
+  String _getFilterSummaryText(
+    CompletedFilterType filterType,
+    String? selectedProjectId,
+    WidgetRef ref,
+  ) {
+    switch (filterType) {
+      case CompletedFilterType.dailyTasks:
+        return 'Showing completed daily tasks';
+      case CompletedFilterType.projects:
+        if (selectedProjectId != null) {
+          final projects = ref.watch(accessibleProjectsProvider);
+          final project = projects.cast<ProjectModel>().firstWhere(
+            (p) => p.id == selectedProjectId,
+            orElse: () => ProjectModel(
+              id: '',
+              name: 'Unknown Project',
+              ownerId: '',
+              createdAt: DateTime.now(), // ✅ FIXED: Add required createdAt parameter
+            ),
+          );
+          return 'Showing completed tasks from: ${project.name}';
+        } else {
+          return 'Showing completed tasks from all projects';
+        }
+      default:
+        return '';
+    }
+  }
+
+  /// Helper method for empty state based on filter type
+  Widget _buildCompletedEmptyState(BuildContext context, CompletedFilterType filterType) {
+    String message;
+    IconData icon;
+
+    switch (filterType) {
+      case CompletedFilterType.dailyTasks:
+        message = 'No completed daily tasks yet!';
+        icon = Icons.today;
+        break;
+      case CompletedFilterType.projects:
+        message = 'No completed project tasks yet!';
+        icon = Icons.folder;
+        break;
+      default:
+        message = 'No completed tasks yet!';
+        icon = Icons.check_circle_outline;
     }
 
-    return ListView.builder(
-      itemCount: completedTodos.length,
-      itemBuilder: (context, index) {
-        return TodoItem(todo: completedTodos[index]);
-      },
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 64,
+            color: Theme.of(context).hintColor,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: 16,
+              color: Theme.of(context).hintColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 

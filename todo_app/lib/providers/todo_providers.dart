@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../backend/models/todo_model.dart';
+import '../backend/models/project_model.dart'; // ✅ ADDED: Import ProjectModel
 import 'package:hive/hive.dart';
 import 'performance_initialization_providers.dart';
 import 'auth_providers.dart'; // for currentUserProvider
@@ -69,7 +70,7 @@ const _uuid = Uuid();
 // Enum mới cho các mục trong Sidebar - Thêm addTask ở đầu
 enum SidebarItem { addTask, today, upcoming, completed, myProject }
 
-// Provider để quản lý trạng thái AddTask overlay
+// Provider để quản lý trạng th��i AddTask overlay
 final addTaskOverlayProvider = StateProvider<bool>((ref) => false);
 
 // Provider để quản lý hiệu ứng thành công khi add task
@@ -135,9 +136,7 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
   }
 
   static List<Todo> _filterByOwner(Box<Todo> box, String? ownerId) {
-    // ✅ FIXED: Only show assigned tasks in personal Today/Upcoming views
-    // Business Logic: Personal views should only show tasks assigned TO user
-    // Unassigned tasks should only appear in project/section views
+    // ✅ BUSINESS LOGIC: Personal Today/Upcoming views - show tasks user can work on
     final allTodos = box.values.toList();
 
     print('🔍 DEBUG: Filtering todos for user: $ownerId');
@@ -145,7 +144,7 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
 
     for (int i = 0; i < allTodos.length && i < 5; i++) {
       final todo = allTodos[i];
-      print('🔍 DEBUG: Todo $i - ownerId: ${todo.ownerId}, assignedTo: ${todo.assignedToId}, desc: ${todo.description}');
+      print('🔍 DEBUG: Todo $i - ownerId: ${todo.ownerId}, assignedTo: ${todo.assignedToId}, projectId: ${todo.projectId}, desc: ${todo.description}');
     }
 
     List<Todo> filtered;
@@ -154,17 +153,27 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
       // Guest user - only show unowned and unassigned todos
       filtered = allTodos.where((t) => t.ownerId == null && t.assignedToId == null).toList();
     } else {
-      // ✅ FIXED: Only show tasks assigned TO current user in personal views
-      // Unassigned tasks (assignedToId == null) should NOT appear in Today/Upcoming
-      // They should only appear in project/section views where they can be assigned
-      filtered = allTodos.where((t) => t.assignedToId == ownerId).toList();
+      // ✅ FIXED: Show tasks user can work on in personal views
+      filtered = allTodos.where((todo) {
+        // Rule 1: Tasks assigned TO current user (highest priority)
+        if (todo.assignedToId == ownerId) return true;
+
+        // Rule 2: Personal tasks (owned by user, no project assignment)
+        if (todo.ownerId == ownerId && todo.projectId == null && todo.assignedToId == null) return true;
+
+        // Rule 3: ✅ FIXED - Tasks in projects owned by user that are unassigned
+        // This allows users to see their project tasks in Today/Upcoming even if not explicitly assigned
+        if (todo.ownerId == ownerId && todo.projectId != null && todo.assignedToId == null) return true;
+
+        return false;
+      }).toList();
     }
 
     print('🔍 DEBUG: Filtered todos count: ${filtered.length}');
-    print('🔍 DEBUG: Personal view shows only assigned tasks:');
+    print('🔍 DEBUG: Personal view shows tasks user can work on:');
     for (int i = 0; i < filtered.length && i < 3; i++) {
       final todo = filtered[i];
-      print('🔍 DEBUG: - ${todo.description} (assigned to: ${todo.assignedToId})');
+      print('🔍 DEBUG: - ${todo.description} (owned: ${todo.ownerId}, assigned: ${todo.assignedToId}, project: ${todo.projectId})');
     }
 
     return filtered;
@@ -223,7 +232,12 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
     if (idx != -1) {
       final todo = _box.getAt(idx);
       if (todo != null) {
-        _box.putAt(idx, todo.copyWith(completed: !todo.completed));
+        final newCompleted = !todo.completed;
+        _box.putAt(idx, todo.copyWith(
+          completed: newCompleted,
+          completedByUserId: newCompleted ? _currentUserId : null,
+          completedByUserIdSetToNull: !newCompleted, // Clear when uncompleting
+        ));
         state = _filterByOwner(_box, _currentUserId);
 
         // ✅ CRITICAL FIX: Invalidate providers when toggling task completion
@@ -284,23 +298,24 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
     }
   }
 
-  // ✅ NEW: Comprehensive provider invalidation for real-time updates
+  // ✅ COMPLETELY FIXED: No provider invalidation approach - avoid circular dependency entirely
   void _invalidateRelatedProviders() {
     try {
-      // ✅ CORE: Invalidate only providers defined in this file to avoid circular dependency
-      _ref.invalidate(projectTodosProvider);
-      _ref.invalidate(filteredTodosProvider);
-      _ref.invalidate(todayTodoCountProvider);
+      // ✅ STRATEGY: Only use forceRefresh, don't invalidate any providers
+      // This avoids all circular dependency issues while maintaining reactivity
+      Future.microtask(() {
+        try {
+          final currentValue = _ref.read(forceRefreshProvider);
+          _ref.read(forceRefreshProvider.notifier).state = currentValue + 1;
+          print('🔄 SAFE: Only triggered forceRefresh - no invalidations');
+        } catch (e) {
+          print('⚠️ Error in forceRefresh: $e');
+        }
+      });
 
-      // ✅ ENHANCED: Invalidate project-related providers
-      final projects = _ref.read(projectsProvider);
-      for (final project in projects) {
-        _ref.invalidate(sectionsByProjectProvider(project.id));
-      }
-
-      print('🔄 INVALIDATED core providers for real-time UI updates');
+      print('🔄 SCHEDULED safe update without provider invalidations');
     } catch (e) {
-      print('⚠️ Error invalidating providers: $e');
+      print('⚠️ Error in _invalidateRelatedProviders: $e');
     }
   }
 
@@ -325,19 +340,14 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
   void refreshFromBox() {
     state = _filterByOwner(_box, _currentUserId);
 
-    // ✅ FIXED: Invalidate related providers để cập nhật UI ngay lập tức
+    // ✅ CRITICAL FIX: Remove circular dependency and improve real-time updates
     try {
-      _ref.invalidate(projectTodosProvider);
+      // Don't invalidate projectTodosProvider to avoid circular dependency
       _ref.invalidate(filteredTodosProvider);
-
-      // ✅ NOTE: Task filtering providers will be invalidated automatically
-      // since they watch projectTodosProvider which is invalidated above
-
-      // Invalidate specific project providers if needed
-      final projects = _ref.read(projectsProvider);
-      for (final project in projects) {
-        _ref.invalidate(sectionsByProjectProvider(project.id));
-      }
+      _ref.invalidate(todayTodoCountProvider);
+      _ref.invalidate(overdueTodosProvider);
+      _ref.invalidate(overdueTodoCountProvider);
+      _ref.invalidate(todayOnlyTodosProvider);
 
       print('🔄 TodoListNotifier refreshed and invalidated related providers');
     } catch (e) {
@@ -441,7 +451,7 @@ final todoListProvider = StateNotifierProvider<TodoListNotifier, List<Todo>>(
 );
 
 // Provider quản lý trạng thái bộ lọc sidebar (StateProvider - Riverpod)
-// Ví dụ cho provider combination: provider này sẽ được các provider khác lắng nghe để lọc danh sách công việc
+// Ví dụ cho provider combination: provider này sẽ được các provider khác lắng nghe để lọc danh sách công vi���c
 final sidebarItemProvider = StateProvider<SidebarItem>(
   (ref) => SidebarItem.today,
 );
@@ -468,7 +478,9 @@ final appBarTitleProvider = Provider<String>((ref) {
 // Khi trạng thái bộ lọc hoặc danh sách công việc thay đổi, provider này sẽ tự động tính toán lại danh sách công việc cần hiển thị
 final filteredTodosProvider = Provider<List<Todo>>((ref) {
   final selectedItem = ref.watch(sidebarItemProvider);
-  final todos = ref.watch(todoListProvider);
+  final todos = ref.watch(todoListProvider); // Personal workspace tasks
+  final allProjectTodos = ref.watch(projectTodosProvider); // All accessible project tasks
+  final currentUser = ref.watch(currentUserProvider);
 
   switch (selectedItem) {
     case SidebarItem.addTask:
@@ -492,7 +504,27 @@ final filteredTodosProvider = Provider<List<Todo>>((ref) {
           )
           .toList();
     case SidebarItem.completed:
-      return todos.where((todo) => todo.completed).toList();
+      // ✅ FIXED: Chỉ hiện completed tasks của user hiện tại
+      if (currentUser == null) return [];
+
+      return allProjectTodos.where((todo) {
+        if (!todo.completed) return false;
+
+        // ✅ RULE 1: Chỉ hiện nếu user hiện tại là người hoàn thành task
+        // Đây là rule chính - ai complete thì hiện trong completed của người đó
+        if (todo.completedByUserId == currentUser.id) return true;
+
+        // ✅ RULE 2: Ngoại lệ - nếu không có thông tin completedByUserId (legacy data)
+        // thì hiện task mà user sở hữu hoặc được assign
+        if (todo.completedByUserId == null) {
+          // Hiện nếu user sở hữu task
+          if (todo.ownerId == currentUser.id) return true;
+          // Hiện nếu task được assign cho user
+          if (todo.assignedToId == currentUser.id) return true;
+        }
+
+        return false;
+      }).toList();
     case SidebarItem.myProject:
       return [];
   }
@@ -579,7 +611,7 @@ final enhancedUpcomingGroupedTodosProvider = Provider<List<GroupedTodos>>((ref) 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    // ✅ CRITICAL FIXED: Sử dụng upcomingWeekStartProvider để đồng bộ với date selector
+    // ✅ CRITICAL FIXED: Sử dụng upcomingWeekStartProvider để đồng b�� với date selector
     final weekStart = ref.watch(upcomingWeekStartProvider);
     final weekEnd = weekStart.add(const Duration(days: 6));
 
@@ -681,7 +713,13 @@ final enhancedUpcomingGroupedTodosProvider = Provider<List<GroupedTodos>>((ref) 
 
 // ✅ NEW: Provider cho Project/Section views - hiển thị TẤT CẢ todos trong project
 // Khác với todoListProvider, provider này không filter theo assignee
+final forceRefreshProvider = StateProvider<int>((ref) => 0);
+
+// ✅ ENHANCED: Project todos provider with force refresh capability
 final projectTodosProvider = Provider<List<Todo>>((ref) {
+  // ✅ CRITICAL: Watch forceRefreshProvider to trigger updates
+  ref.watch(forceRefreshProvider);
+
   // ✅ FIX: Watch todoBoxProvider properly to ensure reactive updates
   final todoBox = ref.watch(todoBoxProvider);
   final currentUser = ref.watch(currentUserProvider);
@@ -716,3 +754,66 @@ final projectTodosProvider = Provider<List<Todo>>((ref) {
   }).toList();
 });
 
+// ✅ NEW: Providers for completed tasks filtering
+enum CompletedFilterType { all, dailyTasks, projects }
+
+final completedFilterTypeProvider = StateProvider<CompletedFilterType>((ref) => CompletedFilterType.all);
+final completedSelectedProjectIdProvider = StateProvider<String?>((ref) => null);
+final completedProjectSearchProvider = StateProvider<String>((ref) => '');
+
+// ✅ NEW: Provider for filtered completed tasks based on filter criteria
+final filteredCompletedTodosProvider = Provider<List<Todo>>((ref) {
+  final allProjectTodos = ref.watch(projectTodosProvider);
+  final currentUser = ref.watch(currentUserProvider);
+  final filterType = ref.watch(completedFilterTypeProvider);
+  final selectedProjectId = ref.watch(completedSelectedProjectIdProvider);
+
+  if (currentUser == null) return [];
+
+  // First filter: get only completed tasks relevant to current user
+  final completedTasks = allProjectTodos.where((todo) {
+    if (!todo.completed) return false;
+
+    // Show if user completed the task
+    if (todo.completedByUserId == currentUser.id) return true;
+
+    // Legacy support - if no completedByUserId
+    if (todo.completedByUserId == null) {
+      if (todo.ownerId == currentUser.id) return true;
+      if (todo.assignedToId == currentUser.id) return true;
+    }
+
+    return false;
+  }).toList();
+
+  // Second filter: apply filter criteria
+  switch (filterType) {
+    case CompletedFilterType.all:
+      return completedTasks;
+
+    case CompletedFilterType.dailyTasks:
+      // Daily tasks = tasks without project (personal tasks)
+      return completedTasks.where((todo) => todo.projectId == null).toList();
+
+    case CompletedFilterType.projects:
+      if (selectedProjectId != null) {
+        // Show tasks from specific project
+        return completedTasks.where((todo) => todo.projectId == selectedProjectId).toList();
+      } else {
+        // Show all project tasks (exclude daily tasks)
+        return completedTasks.where((todo) => todo.projectId != null).toList();
+      }
+  }
+});
+
+// ✅ NEW: Provider for filtered projects list with search
+final searchableProjectsProvider = Provider<List<ProjectModel>>((ref) {
+  final projects = ref.watch(accessibleProjectsProvider);
+  final searchQuery = ref.watch(completedProjectSearchProvider);
+
+  if (searchQuery.isEmpty) return projects;
+
+  return projects.where((project) =>
+    project.name.toLowerCase().contains(searchQuery.toLowerCase())
+  ).toList();
+});

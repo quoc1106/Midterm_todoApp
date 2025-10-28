@@ -99,6 +99,32 @@ final projectTasksWithFilterProvider = Provider.family<List<Todo>, String>((ref,
   return projectTodos.where((todo) => todo.assignedToId == selectedFilter).toList();
 });
 
+/// ✅ NEW: Provider.family - Completed tasks in shared project (ALL users)
+/// This shows completed tasks from ALL users in the project for team collaboration
+final sharedProjectCompletedTasksProvider = Provider.family<List<Todo>, String>((ref, projectId) {
+  // Get ALL tasks in the project (not filtered by current user)
+  final allProjectTodos = ref.watch(projectTodosProvider);
+
+  // Return only completed tasks in this project (from ALL users)
+  return allProjectTodos.where((todo) =>
+    todo.projectId == projectId &&
+    todo.completed
+  ).toList();
+});
+
+/// ✅ NEW: Provider.family - Active tasks in shared project (ALL users)
+/// This shows active tasks from ALL users in the project for team collaboration
+final sharedProjectActiveTasksProvider = Provider.family<List<Todo>, String>((ref, projectId) {
+  // Get ALL tasks in the project (not filtered by current user)
+  final allProjectTodos = ref.watch(projectTodosProvider);
+
+  // Return only active tasks in this project (from ALL users)
+  return allProjectTodos.where((todo) =>
+    todo.projectId == projectId &&
+    !todo.completed
+  ).toList();
+});
+
 /// ✅ ENHANCED: Provider to get unassigned task count in project with reactive updates
 final reactiveUnassignedTaskCountProvider = Provider.family<int, String>((ref, projectId) {
   // Use projectTodosProvider to ensure we see ALL tasks in shared projects
